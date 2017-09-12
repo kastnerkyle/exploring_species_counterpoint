@@ -1,0 +1,2 @@
+# exploring_species_counterpoint
+Experiments in species counterpoint
