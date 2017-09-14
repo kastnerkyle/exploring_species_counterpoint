@@ -925,6 +925,8 @@ def plot_lilypond(upper_voices, lower_voices=None, own_staves=False,
                   key_signatures=None,
                   time_signatures=None,
                   chord_annotations=None,
+                  interval_figures=None,
+                  use_clefs=None,
                   fpath="tmp.ly",
                   title="Tmp", composer="Tmperstein", tagline="Copyright:?",
                   x_bounds=(0, None), y_bounds=(15, None)):
@@ -936,6 +938,8 @@ def plot_lilypond(upper_voices, lower_voices=None, own_staves=False,
     if len(upper_voices) > 1:
         if lower_voices == None and own_staves==False:
             raise ValueError("Multiple voices in upper staff with own_staves=False")
+    if use_clefs is None:
+        use_clefs = ["treble" for i in range(len(pitches))]
     import matplotlib.pyplot as plt
     import matplotlib.image as mpimg
     # need to align them for chord write T_T
@@ -1003,6 +1007,7 @@ def plot_lilypond(upper_voices, lower_voices=None, own_staves=False,
     pre += chord_str
 
     if own_staves == False:
+        raise ValueError("FIX")
         upper_staff = ""
         lower_staff = ""
 
@@ -1062,7 +1067,11 @@ def plot_lilypond(upper_voices, lower_voices=None, own_staves=False,
                 this_staff += vi + " "
 
             this_voice = "{}".format("voice{}".format(n))
-            staff += '  \\new Voice = "{}"'.format(this_voice) + " {" + this_staff + "}\n"
+            staff += '  \\new Voice = "{}"'.format(this_voice) + " {" + '\clef "' + use_clefs[n] + '" ' + this_staff + "}\n"
+            if interval_figures is not None and len(interval_figures) > n:
+                this_intervals = interval_figures[n]
+                this_intervals = "<1>1 <3> <5> <6> <3> <3> <3> <6> <3> <3> <5> <1>"
+                staff += "  \\new FiguredBass \\figuremode { " + this_intervals + " }\n"
             # only the bottom staff...
             if n == trange - 1:
                 staff += '  \\new Lyrics \\lyricsto "{}"'.format(this_voice) + " { \\analysis }\n"
@@ -1184,7 +1193,7 @@ def map_music21_romans_to_lilypond(chord_annotations):
     return lilypond_chords
 
 
-def map_midi_durations_to_lilypond(durations, extras):
+def map_midi_durations_to_lilypond(durations, extras=None):
     # assumed to be relative lengths from quarter note?
     # do I need to make Fraction objects?
     # default is quarter note
@@ -1201,6 +1210,14 @@ def map_midi_durations_to_lilypond(durations, extras):
                     ff(.25): "16",
                     ff(.125): "32",
                     ff(.0625): "64"}
+
+    if extras is None:
+        extras = []
+        for du in durations:
+            e = []
+            for diu in du:
+                e.append(0)
+            extras.append(e)
 
     lily_str_lists = []
     assert len(durations) == len(extras)
@@ -1220,7 +1237,7 @@ def map_midi_durations_to_lilypond(durations, extras):
     return lily_str_lists
 
 
-def pitches_and_durations_to_lilypond_notation(pitches, durations, extras,
+def pitches_and_durations_to_lilypond_notation(pitches, durations, extras=None,
                                                key_signatures=None):
     lilypitches = map_midi_pitches_to_lilypond(pitches, key_signatures=key_signatures)
     lilydurs = map_midi_durations_to_lilypond(durations, extras)
@@ -1233,13 +1250,15 @@ def pitches_and_durations_to_lilypond_notation(pitches, durations, extras,
     return lilycomb
 
 
-def plot_pitches_and_durations(pitches, durations, extras,
+def plot_pitches_and_durations(pitches, durations, extras=None,
                                time_signatures=None,
                                key_signatures=None,
-                               chord_annotations=None):
+                               chord_annotations=None,
+                               interval_figures=None,
+                               use_clefs=None):
     # map midi pitches to lilypond ones... oy
     voices = pitches_and_durations_to_lilypond_notation(pitches, durations, extras, key_signatures=key_signatures)
-    #plot_lilypond([voices[0]])
+    #plot_lilypond([voices[1]])
     #plot_lilypond([voices[0]], [voices[-1]])
     #plot_lilypond([voices[0]], [voices[-1]], own_staves=True)
     # TODO: fix own_staves=False issues with conflicting time/key signatures
@@ -1250,24 +1269,80 @@ def plot_pitches_and_durations(pitches, durations, extras,
     plot_lilypond(voices, own_staves=True,
                   time_signatures=time_signatures,
                   key_signatures=key_signatures,
-                  chord_annotations=chord_annotations)
+                  chord_annotations=chord_annotations,
+                  interval_figures=interval_figures,
+                  use_clefs=use_clefs)
     raise ValueError("b")
 
 
-#p = converter.parse("Jos2721-La_Bernardina.krn")
-p = converter.parse("Jos2835-Une_musque_de_Buscaya.krn")
+def notes_to_midi(notes):
+    # r is rest
+    # takes in list of list
+    # + is sharp
+    # - is flat
+    # c4 = c in 4th octave
+    # 0 = rest
+    # 12 = C0
+    # 24 = C1
+    # 36 = C2
+    # 48 = C3
+    # 60 = C4
+    # 72 = C5
+    # 84 = C6
+    base = {"C": 0,
+            "D": 2,
+            "E": 4,
+            "F": 5,
+            "G": 7,
+            "A": 9,
+            "B": 11}
+    pitch_list = []
+    for nl in notes:
+        pitch_line = []
+        for nn in nl:
+            if "+" in nn:
+                base_pitch = base[nn[0]]
+                offset = 1
+                octave = (int(nn[-1]) + 1) * 12
+            elif "-" in nn:
+                base_pitch = base[nn[0]]
+                offset = -1
+                octave = (int(nn[-1]) + 1) * 12
+            else:
+                base_pitch = base[nn[0]]
+                offset = 0
+                octave = (int(nn[-1]) + 1) * 12
+            r = base_pitch + octave + offset
+            pitch_line.append(r)
+        pitch_list.append(pitch_line)
+    return pitch_list
 
-r = music21_extract(p)
-parts = r["parts"]
-parts_durations = r["parts_delta_times"]
-parts_extras = r["parts_extras"]
-parts_time_signatures = r["parts_time_signatures"]
-parts_key_signatures = r["parts_key_signatures"]
-parts_roman_chords = r["parts_roman_chords"]
-plot_pitches_and_durations(parts, parts_durations, parts_extras,
-                           time_signatures=parts_time_signatures,
-                           key_signatures=parts_key_signatures,
-                           chord_annotations=parts_roman_chords)
+#p = converter.parse("Jos2721-La_Bernardina.krn")
+#p = converter.parse("Jos2835-Une_musque_de_Buscaya.krn")
+#r = music21_extract(p)
+#parts = r["parts"]
+#parts_durations = r["parts_delta_times"]
+#parts_extras = r["parts_extras"]
+#parts_time_signatures = r["parts_time_signatures"]
+#parts_key_signatures = r["parts_key_signatures"]
+#parts_roman_chords = r["parts_roman_chords"]
+#plot_pitches_and_durations(parts, parts_durations, parts_extras,
+#                           time_signatures=parts_time_signatures,
+#                           key_signatures=parts_key_signatures,
+#                           chord_annotations=parts_roman_chords)
+
+notes = [["C4", "G3", "A3", "G3", "E3", "F3", "E3", "D3", "C3"],
+         ["C2", "E2", "F2", "B1", "C2", "A1", "G1", "G1", "C2"]]
+parts = notes_to_midi(notes)
+durations = [[4.] * 9, [4.] * 9]
+chord_annotations = ["i", "I6", "IV", "V6", "I", "IV6", "I64", "V", "I"]
+time_signatures = [(4, 4), (4, 4)]
+clefs = ["treble", "bass"]
+plot_pitches_and_durations(parts, durations,
+                           chord_annotations=chord_annotations,
+                           interval_figures=[[0]],
+                           use_clefs=clefs)
+from IPython import embed; embed(); raise ValueError()
 
 
 #plot_lilypond([["<c'>", "<e'>", "<g'>", "<a'>"]], [["<c>", "<e>", "<g>", "<a>"]])
