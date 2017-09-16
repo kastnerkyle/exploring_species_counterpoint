@@ -929,7 +929,7 @@ def plot_lilypond(upper_voices, lower_voices=None, own_staves=False,
                   use_clefs=None,
                   fpath="tmp.ly",
                   title="Tmp", composer="Tmperstein", tagline="Copyright:?",
-                  x_bounds=(0, None), y_bounds=(15, None)):
+                  x_zoom_bounds=(90, 780), y_zoom_bounds=(50, 220)):
     """
     Expects upper_voices and lower_voices to be list of list
 
@@ -1070,8 +1070,11 @@ def plot_lilypond(upper_voices, lower_voices=None, own_staves=False,
             staff += '  \\new Voice = "{}"'.format(this_voice) + " {" + '\clef "' + use_clefs[n] + '" ' + this_staff + "}\n"
             if interval_figures is not None and len(interval_figures) > n:
                 this_intervals = interval_figures[n]
-                this_intervals = "<1>1 <3> <5> <6> <3> <3> <3> <6> <3> <3> <5> <1>"
-                staff += "  \\new FiguredBass \\figuremode { " + this_intervals + " }\n"
+                intervals_str = ""
+                for ti in this_intervals:
+                    intervals_str += "<" + str(ti) + "> "
+                intervals_str = intervals_str.strip()
+                staff += "  \\new FiguredBass \\figuremode { " + intervals_str + " }\n"
             # only the bottom staff...
             if n == trange - 1:
                 staff += '  \\new Lyrics \\lyricsto "{}"'.format(this_voice) + " { \\analysis }\n"
@@ -1099,8 +1102,20 @@ tagline = "{}"
     flist = [fl for fl in flist if "page1" in fl or "page" not in fl]
     latest_file = max(flist, key=os.path.getctime)
     img = mpimg.imread(latest_file)
-    img = img[y_bounds[0]:y_bounds[1], x_bounds[0]:x_bounds[1]]
-    plt.imshow(img)
+    f = plt.figure()
+    ax = plt.gca()
+    if None in x_zoom_bounds:
+        if x_zoom_bounds[-1] is not None:
+            raise ValueError("None for x_zoom_bounds only supported on last entry")
+        x_zoom_bounds = (x_zoom_bounds[0], img.shape[1])
+
+    if None in y_zoom_bounds:
+        if y_zoom_bounds[-1] is not None:
+            raise ValueError("None for y_zoom_bounds only supported on last entry")
+        y_zoom_bounds = (y_zoom_bounds[0], img.shape[0])
+    ax.set_xlim(x_zoom_bounds[0], x_zoom_bounds[1])
+    ax.set_ylim(y_zoom_bounds[1], y_zoom_bounds[0])
+    ax.imshow(img)
     plt.show()
 
 
@@ -1272,15 +1287,15 @@ def plot_pitches_and_durations(pitches, durations, extras=None,
                   chord_annotations=chord_annotations,
                   interval_figures=interval_figures,
                   use_clefs=use_clefs)
-    raise ValueError("b")
 
 
 def notes_to_midi(notes):
     # r is rest
     # takes in list of list
-    # + is sharp
-    # - is flat
-    # c4 = c in 4th octave
+    # # is sharp
+    # b is flat
+    # letters should be all caps!
+    # C4 = C in 4th octave
     # 0 = rest
     # 12 = C0
     # 24 = C1
@@ -1300,11 +1315,11 @@ def notes_to_midi(notes):
     for nl in notes:
         pitch_line = []
         for nn in nl:
-            if "+" in nn:
+            if "#" in nn:
                 base_pitch = base[nn[0]]
                 offset = 1
                 octave = (int(nn[-1]) + 1) * 12
-            elif "-" in nn:
+            elif "b" in nn:
                 base_pitch = base[nn[0]]
                 offset = -1
                 octave = (int(nn[-1]) + 1) * 12
@@ -1317,33 +1332,317 @@ def notes_to_midi(notes):
         pitch_list.append(pitch_line)
     return pitch_list
 
-#p = converter.parse("Jos2721-La_Bernardina.krn")
-#p = converter.parse("Jos2835-Une_musque_de_Buscaya.krn")
-#r = music21_extract(p)
-#parts = r["parts"]
-#parts_durations = r["parts_delta_times"]
-#parts_extras = r["parts_extras"]
-#parts_time_signatures = r["parts_time_signatures"]
-#parts_key_signatures = r["parts_key_signatures"]
-#parts_roman_chords = r["parts_roman_chords"]
-#plot_pitches_and_durations(parts, parts_durations, parts_extras,
-#                           time_signatures=parts_time_signatures,
-#                           key_signatures=parts_key_signatures,
-#                           chord_annotations=parts_roman_chords)
+def intervals_from_midi(parts, full_name=False):
+    if len(parts) < 2:
+        raise ValueError("Must be at least 2 parts to compare intervals")
+    if len(parts) > 2:
+        raise ValueError("NYI")
 
-notes = [["C4", "G3", "A3", "G3", "E3", "F3", "E3", "D3", "C3"],
-         ["C2", "E2", "F2", "B1", "C2", "A1", "G1", "G1", "C2"]]
-parts = notes_to_midi(notes)
-durations = [[4.] * 9, [4.] * 9]
-chord_annotations = ["i", "I6", "IV", "V6", "I", "IV6", "I64", "V", "I"]
-time_signatures = [(4, 4), (4, 4)]
-clefs = ["treble", "bass"]
-plot_pitches_and_durations(parts, durations,
-                           chord_annotations=chord_annotations,
-                           interval_figures=[[0]],
-                           use_clefs=clefs)
-from IPython import embed; embed(); raise ValueError()
+    intervals = []
+    this_intervals = []
+    proposed = np.array(parts[0]) - np.array(parts[1])
+    for p in proposed:
+        # strip off name
+        if full_name:
+            this_intervals.append(intervals_map[p])
+        else:
+            nm = intervals_map[p]
+            if "-" not in nm:
+                this_intervals.append(nm[1:])
+            else:
+                this_intervals.append(nm[2:])
+    intervals.append(this_intervals)
+    return intervals
+
+def motion_from_midi(parts):
+    if len(parts) != 2:
+        raise ValueError("NYI")
+    # similar, oblique, contrary, direct
+    p0 = np.array(parts[0])
+    p1 = np.array(parts[1])
+    dp0 = p0[1:] - p0[:-1]
+    dp1 = p1[1:] - p1[:-1]
+    # first motion is always start...
+    motions = ["START"]
+    for dip0, dip1 in zip(dp0, dp1):
+        if dip0 == 0 or dip1 == 0:
+            motions.append("OBLIQUE")
+        elif dip0 == dip1:
+            motions.append("DIRECT")
+        elif dip0 > 0 and dip1 < 0:
+            motions.append("CONTRARY")
+        elif dip0 < 0 and dip1 > 0:
+            motions.append("CONTRARY")
+        elif dip0 < 0 and dip1 < 0:
+            motions.append("SIMILAR")
+        elif dip0 > 0 and dip1 > 0:
+            motions.append("SIMILAR")
+        else:
+            raise ValueError("Should never see this case!")
+    motions.append("END")
+    return [motions]
 
 
-#plot_lilypond([["<c'>", "<e'>", "<g'>", "<a'>"]], [["<c>", "<e>", "<g>", "<a>"]])
-#plot_lilypond([["<c'>", "<e'>", "<g'>", "<a'>"], ["<c''>", "<e''>", "<g''>", "<a''>"]], [["<c>", "<e>", "<g>", "<a>"], ["<c,>", "<e,>", "<g,>", "<a,>"]])
+def rules_from_midi(parts, key_signature):
+    full_intervals = intervals_from_midi(parts, True)
+    full_motions = motion_from_midi(parts)
+    assert len(full_intervals) == len(full_motions)
+    all_rulesets = []
+    i = 0
+    for fi, fm in zip(full_intervals, full_motions):
+        fimi = 0
+        this_ruleset = []
+        while i < len(fi):
+            this_interval = fi[i]
+            this_motion = fm[i]
+            this_notes = tuple([p[i] for p in parts])
+            last_interval = None
+            last_motion = None
+            last_notes = None
+            if i > 0:
+                last_interval = fi[i - 1]
+                last_notes = tuple([p[i - 1] for p in parts])
+                last_motion = fm[i - 1]
+            this_ruleset.append(make_rule(this_interval, this_motion, this_notes,
+                                          key_signature,
+                                          last_interval, last_motion, last_notes))
+            i += 1
+        all_rulesets.append(this_ruleset)
+    return all_rulesets
+
+# previous movement, previous interval, previous notes
+rule_template = "{}:{}:{},{}->{}:{}:{},{}"
+# key, top note, bottom note
+reduced_template = "K{},{},{}->{}:{}:{},{}"
+
+# todo, figure out others...
+base_pitch_map = {"C": 0,
+                  "C#": 1,
+                  "D": 2,
+                  "Eb": 3,
+                  "E": 4,
+                  "F": 5,
+                  "F#": 6,
+                  "G": 7,
+                  "G#": 8,
+                  "A": 9,
+                  "Bb": 10,
+                  "B": 11}
+base_note_map = {v: k for k, v in base_pitch_map.items()}
+
+key_signature_map = {0: "C"}
+key_check = {"C": ["C", "D", "E", "F", "G", "A", "B"]}
+intervals_map = {-16: "-M10",
+                -15: "-m10",
+                -14: "-M9",
+                -13: "-m9",
+                -12: "-P8",
+                -11: "-m2",
+                -10: "-M2",
+                -9: "-m3",
+                -8: "-M3",
+                -7: "-P4",
+                -6: "-a4",
+                -5: "-P5",
+                -4: "-m6",
+                -3: "-M6",
+                -2: "-m7",
+                -1: "-M7",
+                0: "P1",
+                1: "m2",
+                2: "M2",
+                3: "m3",
+                4: "M3",
+                5: "P4",
+                6: "a4",
+                7: "P5",
+                8: "m6",
+                9: "M6",
+                10: "m7",
+                11: "M7",
+                12: "P8",
+                13: "m9",
+                14: "M9",
+                15: "m10",
+                16: "M10",
+                17: "P11",
+                18: "a11",
+                19: "P12",
+                20: "m13",
+                21: "M13"}
+
+inverse_intervals_map = {v: k for k, v in intervals_map.items()}
+
+perfect_intervals = {"P1": None,
+                     "P8": None,
+                     "P5": None,
+                     "P4": None}
+harmonic_intervals = {"P1": None,
+                      "P8": None,
+                      "P5": None,
+                      "P4": None,
+                      "m3": None,
+                      "M3": None,
+                      "m6": None,
+                      "M6": None,
+                      "m10": None,
+                      "M10": None}
+hamonic_intervals = {k: v for k, v in inverse_intervals_map.items()
+                     if k in harmonic_intervals}
+
+allowed_perfect_motion = {"CONTRARY": None,
+                          "OBLIQUE": None}
+
+def midi_to_notes(parts):
+    all_parts = []
+    for p in parts:
+        this_notes = []
+        for pi in p:
+            octave = pi // 12 - 1
+            pos = base_note_map[pi % 12]
+            this_notes.append(pos + str(octave))
+        all_parts.append(this_notes)
+    return all_parts
+
+
+def make_rule(this_interval, this_motion, this_notes, key_signature,
+              last_interval=None, last_motion=None, last_notes=None):
+    if last_interval is not None:
+        str_last_notes = midi_to_notes([last_notes])[0]
+        str_this_notes = midi_to_notes([this_notes])[0]
+        nt = rule_template.format(last_motion, last_interval,
+                                  str_last_notes[0], str_last_notes[1],
+                                  this_motion, this_interval,
+                                  str_this_notes[0], str_this_notes[1])
+    else:
+        key = key_signature_map[key_signature]
+        str_notes = midi_to_notes([this_notes])[0]
+        nt = reduced_template.format(key, str_notes[0], str_notes[1], this_motion, this_interval, str_notes[0], str_notes[1])
+    return nt
+
+
+def check_species1_rule(rule, key_signature, mode, parts):
+    last, this = rule.split("->")
+    key = key_signature_map[key_signature]
+    if "K" in last:
+        tm, ti, tn = this.split(":")
+        lk, lns, lnb = last.split(",")
+        # get rid of the K in the front
+        lk = lk[1:]
+        # check that note is in key?
+        if ti == "P8" or ti == "P5":
+            if lnb[:-1] == mode:
+                return ("First bass note {} matches estimated mode {}".format(lnb, mode), True)
+            else:
+                return ("First bass note {} doesn't match estimated mode {}".format(lnb, mode), False)
+        else:
+            return ("First interval {} is not in ['P5', 'P8']".format(ti), False)
+    else:
+        tm, ti, tn = this.split(":")
+        tn0, tn1 = tn.split(",")
+        lm, li, ln = last.split(":")
+        ln0, ln1 = ln.split(",")
+        dn0 = np.diff(np.array(notes_to_midi([[tn0, ln0]])[0]))
+        dn1 = np.diff(np.array(notes_to_midi([[tn1, ln1]])[0]))
+        note_sets = [[ln0, tn0], [ln1, tn1]]
+        for n, voice_step in enumerate([dn0, dn1]):
+            this_step = intervals_map[-int(voice_step)]
+            if this_step in ["a4", "-a4"]:
+                return ("Voice {} stepwise movement {}->{}, {} not allowed".format(n, note_sets[n][0], note_sets[n][1], this_step), False)
+        if ti in perfect_intervals:
+            if tm in allowed_perfect_motion:
+                return ("Movement {} into perfect interval {} allowed".format(tm, ti), True)
+            else:
+                return ("Movement {} into perfect interval {} not allowed".format(tm, ti), False)
+        elif ti in harmonic_intervals:
+            return ("All movements including {} allowed into interval {}".format(tm, ti), True)
+        else:
+            raise ValueError("Shouldn't hit this, current rule is {}".format(rule))
+    raise ValueError("This function must return before the end! Bug, rule {}".format(rule))
+
+
+def estimate_mode(parts, rules, key_signature):
+    first_note = [p[0] for p in parts]
+    final_notes = [p[-2:] for p in parts]
+    final_notes = np.array(final_notes)
+    first_note = np.array(first_note)
+    dfinal_notes = final_notes[-1, -1] - final_notes[-1, 0]
+    if dfinal_notes == 1.:
+        # final cadence indicates the tonic
+        # bass almost always ends on I, i, etc except in half cadence...
+        mode = midi_to_notes([[final_notes[-1, -1]]])[0][0][:-1] # strip octave
+        return mode
+    elif final_notes[-1, -1] == final_notes[0, 0]:
+        mode = midi_to_notes([[final_notes[-1, -1]]])[0][0][:-1] # strip octave
+        return mode
+    elif rules[-1][-1].split("->")[-1].split(":")[1] in ["P8", "P1"]:
+        mode = midi_to_notes([[final_notes[-1, -1]]])[0][0][:-1] # strip octave
+        return mode
+    else:
+        print("Unknown mode estimate...")
+        from IPython import embed; embed(); raise ValueError()
+    raise ValueError("This function must return before the end! Bug, rule {}".format(rule))
+
+
+def analyze_rulesets(parts, rules, key_signature):
+    rules_ok = []
+    for rs in rules:
+        this_ok = []
+        mode = estimate_mode(parts, rules, key_signature)
+        for n, rsi in enumerate(rs):
+            r = check_species1_rule(rsi, key_signature, mode, parts)
+            this_ok.append(r)
+        rules_ok.append(this_ok)
+    return rules_ok
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Demo of utils")
+
+    parser.add_argument('-p', action="store_true", default=False)
+    args = parser.parse_args()
+    print_it = args.p
+    # fig 5, gradus ad parnassum
+    notes = [["A3", "A3", "G3", "A3", "B3", "C4", "C4", "B3", "D4", "C#4", "D4"],
+             ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]]
+    clefs = ["treble", "treble"]
+    # fig 6, initial (incorrect) notes
+    notes = [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
+             ["G2", "D3", "A2", "F2", "E2", "D2", "F2", "C3", "D3", "C#3", "D3"]]
+    clefs = ["treble", "treble_8"]
+    # fig 6, correct notes
+    notes = [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
+             ["D2", "D2", "A2", "F2", "E2", "D2", "F2", "C3", "D3", "C#3", "D3"]]
+    clefs = ["treble", "treble_8"]
+    # fig 11, correct notes
+    notes = [["B3", "C4", "F3", "G3", "A3", "C4", "B3", "E4", "D4", "E4"],
+             ["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"]]
+    clefs = ["treble", "treble_8"]
+    # fig 12, incorrect notes
+    notes = [["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"],
+             ["E2", "A2", "D2", "E2", "F2", "F2", "B2", "C3", "D3", "E3"]]
+    clefs = ["treble", "treble_8"]
+
+    parts = notes_to_midi(notes)
+    if print_it:
+        interval_figures = intervals_from_midi(parts)
+        durations = [[4.] * len(notes[0]), [4.] * len(notes[1])]
+        # can add harmonic nnotations as well to plot
+        #chord_annotations = ["i", "I6", "IV", "V6", "I", "IV6", "I64", "V", "I"]
+        time_signatures = [(4, 4), (4, 4)]
+        pitches_and_durations_to_pretty_midi([parts], [durations],
+                                             save_dir="samples",
+                                             name_tag="sample_{}.mid",
+                                             default_quarter_length=240,
+                                             voice_params="piano")
+        plot_pitches_and_durations(parts, durations,
+                                   interval_figures=interval_figures,
+                                   use_clefs=clefs)
+
+    # C - todo FIX THIS! to handle strings "C"
+    key_signature = 0
+    rules = rules_from_midi(parts, key_signature)
+    aok = analyze_rulesets(parts, rules, key_signature)
+    from IPython import embed; embed(); raise ValueError()
+
