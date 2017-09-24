@@ -4,6 +4,7 @@ import subprocess
 from collections import OrderedDict
 from music21 import converter, roman, key
 import os
+import math
 import numpy as np
 import fractions
 
@@ -1478,6 +1479,9 @@ perfect_intervals = {"P1": None,
                      "P8": None,
                      "P5": None,
                      "P4": None}
+neg_perfect_intervals = {"-P8": None,
+                         "-P5": None,
+                         "-P4": None}
 harmonic_intervals = {"P1": None,
                       "P8": None,
                       "P5": None,
@@ -1488,6 +1492,14 @@ harmonic_intervals = {"P1": None,
                       "M6": None,
                       "m10": None,
                       "M10": None}
+neg_harmonic_intervals = {"-P8": None,
+                          "-P5": None,
+                          "-P4": None,
+                          "-m3": None,
+                          "-M3": None,
+                          "-m6": None,
+                          "-M6": None}
+
 hamonic_intervals = {k: v for k, v in inverse_intervals_map.items()
                      if k in harmonic_intervals}
 
@@ -1549,112 +1561,180 @@ def rsp(rule):
     return rule.split("->")
 
 
-def key_start_rule(rule, key_signature, mode, parts):
-    last, this = rsp(rule)
+def key_start_rule(parts, key_signature, mode):
+    rules = rules_from_midi(parts, key_signature)
+    rules = rules[0]
     key = key_signature_map[key_signature]
-    if "K" in last:
-        tm, ti, tn = this.split(":")
-        lk, lns, lnb = last.split(",")
-        # get rid of the K in the front
-        lk = lk[1:]
-        # check that note is in key?
-        if ti == "P8" or ti == "P5":
-            if lnb[:-1] == mode:
-                return ("key_start_rule: TRUE, start is in mode", True)
+    returns = []
+    for rule in rules:
+        last, this = rsp(rule)
+        if "K" in last:
+            tm, ti, tn = this.split(":")
+            lk, lns, lnb = last.split(",")
+            # get rid of the K in the front
+            lk = lk[1:]
+            # check that note is in key?
+            if ti == "P8" or ti == "P5" or ti == "P1":
+                if lnb[:-1] == mode:
+                    returns.append((True, "key_start_rule: TRUE, start is in mode"))
+                else:
+                    returns.append((False, "key_start_rule: FALSE, first bass note {} doesn't match estimated mode {}".format(lnb, mode)))
             else:
-                return ("key_start_rule: FALSE, first bass note {} doesn't match estimated mode {}".format(lnb, mode), False)
+                returns.append((False, "key_start_rule: FALSE, first interval {} is not in ['P5', 'P8']".format(ti)))
         else:
-            return ("key_start_rule: FALSE, first interval {} is not in ['P5', 'P8']".format(ti), False)
-    else:
-        return ("key_start_rule: NONE, not applicable", None)
-    raise ValueError("Shouldn't get here in key_start_rule")
+            returns.append((None, "key_start_rule: NONE, not applicable"))
+    return returns
 
 
-def next_step_rule(rule, key_signature, mode, parts):
-    last, this = rsp(rule)
+def next_step_rule(parts, key_signature, mode):
+    rules = rules_from_midi(parts, key_signature)
+    rules = rules[0]
     key = key_signature_map[key_signature]
-    tm, ti, tn = this.split(":")
-    tn0, tn1 = tn.split(",")
-    try:
-        lm, li, ln = last.split(":")
-    except ValueError:
-        return ("next_step_rule: NONE, not applicable", None)
-    ln0, ln1 = ln.split(",")
-    dn0 = np.diff(np.array(notes_to_midi([[tn0, ln0]])[0]))
-    dn1 = np.diff(np.array(notes_to_midi([[tn1, ln1]])[0]))
-    note_sets = [[ln0, tn0], [ln1, tn1]]
-    for n, voice_step in enumerate([dn0, dn1]):
-        this_step = intervals_map[-int(voice_step)]
-        if this_step in ["a4", "-a4"]:
-            return ("next_step_rule: FALSE, voice {} stepwise movement {}->{}, {} not allowed".format(n, note_sets[n][0], note_sets[n][1], this_step), False)
-    return ("next_step_rule: TRUE, step move valid", True)
+    returns = []
+    for rule in rules:
+        last, this = rsp(rule)
+        tm, ti, tn = this.split(":")
+        tn0, tn1 = tn.split(",")
+        try:
+            lm, li, ln = last.split(":")
+        except ValueError:
+            returns.append((None, "next_step_rule: NONE, not applicable"))
+            continue
+        ln0, ln1 = ln.split(",")
+        dn0 = np.diff(np.array(notes_to_midi([[tn0, ln0]])[0]))
+        dn1 = np.diff(np.array(notes_to_midi([[tn1, ln1]])[0]))
+        note_sets = [[ln0, tn0], [ln1, tn1]]
+        voice_ok = True
+        msg = None
+        for n, voice_step in enumerate([dn0, dn1]):
+            this_step = intervals_map[-int(voice_step)]
+            if voice_ok is False:
+                continue
+            if this_step in ["a4", "-a4"]:
+                msg = "next_step_rule: FALSE, voice {} stepwise movement {}->{}, {} not allowed".format(n, note_sets[n][0], note_sets[n][1], this_step)
+                voice_ok = False
+            elif abs(int(voice_step)) > 7:
+                msg = "next_step_rule: FALSE, voice {} stepwise skip {}->{}, {} too large".format(n, note_sets[n][0], note_sets[n][1], this_step)
+                voice_ok = False
+            else:
+                msg = "next_step_rule: TRUE, step move valid"
+                voice_ok = True
+        returns.append((voice_ok, msg))
+    return returns
 
 
-def parallel_rule(rule, key_signature, mode, parts):
-    last, this = rsp(rule)
+def leap_rule(parts, key_signature, mode):
+    rules = rules_from_midi(parts, key_signature)
+    rules = rules[0]
     key = key_signature_map[key_signature]
-    tm, ti, tn = this.split(":")
-    tn0, tn1 = tn.split(",")
-    try:
-        lm, li, ln = last.split(":")
-    except ValueError:
-        return ("parallel_rule: NONE, not applicable", None)
-    ln0, ln1 = ln.split(",")
-    dn0 = np.diff(np.array(notes_to_midi([[tn0, ln0]])[0]))
-    dn1 = np.diff(np.array(notes_to_midi([[tn1, ln1]])[0]))
-    note_sets = [[ln0, tn0], [ln1, tn1]]
-    if ti in perfect_intervals:
-        if tm in allowed_perfect_motion:
-            return ("parallel_rule: TRUE, movement {} into perfect interval {} allowed".format(tm, ti), True)
+    returns = []
+    returns.extend([(None, "leap_rule: NONE, not applicable")] * 2)
+    for i in range(2, len(parts[0])):
+        msg = None
+        voice_ok = None
+        for n in range(len(parts)):
+            prev_jmp = parts[n][i - 1] - parts[n][i - 2]
+            cur_step = parts[n][i] - parts[n][i - 1]
+            if abs(prev_jmp) > 3:
+                is_opposite = math.copysign(1, cur_step) != math.copysign(1, prev_jmp)
+                is_step = abs(cur_step) == 1 or abs(cur_step) == 2
+                if is_opposite and is_step:
+                    msg = "leap_rule: TRUE, voice {} leap of {} corrected".format(n, prev_jmp)
+                    voice_ok = True
+                else:
+                    msg = "leap_rule: FALSE, voice {} leap of {} not corrected".format(n, prev_jmp)
+                    voice_ok = False
+            else:
+                msg = "leap_rule: NONE, not applicable"
+                voice_ok = None
+        returns.append((voice_ok, msg))
+    assert len(returns) == len(parts[0])
+    return returns
+
+
+def parallel_rule(parts, key_signature, mode):
+    rules = rules_from_midi(parts, key_signature)
+    rules = rules[0]
+    key = key_signature_map[key_signature]
+    returns = []
+    for rule in rules:
+        last, this = rsp(rule)
+        tm, ti, tn = this.split(":")
+        tn0, tn1 = tn.split(",")
+        try:
+            lm, li, ln = last.split(":")
+        except ValueError:
+            returns.append((None, "parallel_rule: NONE, not applicable"))
+            continue
+        ln0, ln1 = ln.split(",")
+        dn0 = np.diff(np.array(notes_to_midi([[tn0, ln0]])[0]))
+        dn1 = np.diff(np.array(notes_to_midi([[tn1, ln1]])[0]))
+        note_sets = [[ln0, tn0], [ln1, tn1]]
+        if li == "M10" or li == "m10":
+            if ti == "P8":
+                # battuta octave
+                returns.append((False, "parallel_rule: FALSE, battuta octave {}->{} disallowed on first beat".format(li, ti)))
+                continue
+        if ti in perfect_intervals or ti in neg_perfect_intervals:
+            if tm in allowed_perfect_motion:
+                returns.append((True, "parallel_rule: TRUE, movement {} into perfect interval {} allowed".format(tm, ti)))
+                continue
+            else:
+                returns.append((False, "parallel_rule: FALSE, movement {} into perfect interval {} not allowed".format(tm, ti)))
+                continue
+        elif ti in harmonic_intervals or ti in neg_harmonic_intervals:
+            returns.append((True, "parallel_rule: TRUE, all movements including {} allowed into interval {}".format(tm, ti)))
         else:
-            return ("parallel_rule: FALSE, movement {} into perfect interval {} not allowed".format(tm, ti), False)
-    elif ti in harmonic_intervals:
-        return ("parallel_rule: TRUE, all movements including {} allowed into interval {}".format(tm, ti), True)
-    raise ValueError("Shouldn't hit this, current rule is {}".format(rule))
-
+            raise ValueError("parallel_rule: shouldn't get here")
+    return returns
 
 all_rules_map = OrderedDict()
 all_rules_map["key_start_rule"] = key_start_rule
 all_rules_map["next_step_rule"] = next_step_rule
 all_rules_map["parallel_rule"] = parallel_rule
+all_rules_map["leap_rule"] = leap_rule
 
-def check_species1_rule(rule, key_signature, mode, parts):
-    last, this = rsp(rule)
+def check_species1_rule(parts, key_signature, mode):
     key = key_signature_map[key_signature]
-    res = [all_rules_map[arm](rule, key_signature, mode, parts) for arm in all_rules_map.keys()]
+    res = [all_rules_map[arm](parts, key_signature, mode) for arm in all_rules_map.keys()]
 
     global_check = True
     for r in res:
-        if r[-1] is True or r[-1] is None:
+        rr = [True if ri[0] is True or ri[0] is None else False for ri in r]
+        if all(rr):
             pass
         else:
             global_check = False
     return (global_check, res)
 
 
-def analyze_2voice_rulesets(parts, rules, key_signature, species="species1"):
-    rs = rules[0]
-    this_ok = []
-    this_rule = []
+def analyze_2voice_rulesets(parts, key_signature, species="species1"):
+    rules = rules_from_midi(parts, key_signature)
     mode = estimate_mode(parts, rules, key_signature)
-    for n, rsi in enumerate(rs):
-        if species == "species1":
-            r = check_species1_rule(rsi, key_signature, mode, parts)
-        else:
-            raise ValueError("Unknown species argument {}".format(species))
-        this_ok.append(r[0])
-        this_rule.extend([(n, True if ri[-1] in (True, None) else False, ri[0]) for ri in r[1]])
-    return (this_ok, this_rule)
+    if species == "species1":
+        r = check_species1_rule(parts, key_signature, mode)
+    else:
+        raise ValueError("Unknown species argument {}".format(species))
+    all_ok = r[0]
+    this_ok = []
+    for rr in r[1]:
+        for n in range(len(rr)):
+            this_ok.append((n, rr[n][0], rr[n][1]))
+    return (all_ok, sorted(this_ok))
+
 
 def test_species1():
+    print("Running test for species1...")
     all_s1 = []
     all_answers = []
-    # All figure numbers from Gradus ad Parnassum
+    all_fig = []
 
+    # All figure numbers from Gradus ad Parnassum
     # fig 5, correct notes
     notes = [["A3", "A3", "G3", "A3", "B3", "C4", "C4", "B3", "D4", "C#4", "D4"],
              ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]]
     all_s1.append(notes)
+    all_fig.append("fig5")
     t = [True] * 11
     all_answers.append(t)
 
@@ -1662,6 +1742,7 @@ def test_species1():
     notes = [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
              ["G2", "D3", "A2", "F2", "E2", "D2", "F2", "C3", "D3", "C#3", "D3"]]
     all_s1.append(notes)
+    all_fig.append("fig6w")
     t = [True] * 11
     t[0] = False
     t[2] = False
@@ -1671,6 +1752,7 @@ def test_species1():
     notes = [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
              ["D2", "D2", "A2", "F2", "E2", "D2", "F2", "C3", "D3", "C#3", "D3"]]
     all_s1.append(notes)
+    all_fig.append("fig6c")
     t = [True] * 11
     all_answers.append(t)
 
@@ -1678,26 +1760,96 @@ def test_species1():
     notes = [["B3", "C4", "F3", "G3", "A3", "C4", "B3", "E4", "D4", "E4"],
              ["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"]]
     all_s1.append(notes)
+    all_fig.append("fig11")
     t = [True] * 10
+    t[5] = False
     all_answers.append(t)
 
     # fig 12, incorrect notes
     notes = [["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"],
              ["E2", "A2", "D2", "E2", "F2", "F2", "B2", "C3", "D3", "E3"]]
     all_s1.append(notes)
+    all_fig.append("fig12")
     t = [True] * 10
+    t[5] = False
     t[6] = False
     all_answers.append(t)
 
-    for notes, answers in zip(all_s1, all_answers):
+    # fig 13, correct notes
+    notes = [["F3", "E3", "C3", "F3", "F3", "G3", "A3", "G3", "C3", "F3", "E3", "F3"],
+             ["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"]]
+    all_s1.append(notes)
+    all_fig.append("fig13")
+    t = [True] * 12
+    all_answers.append(t)
+
+    # fig 14, correct notes w/ voice crossing
+    notes = [["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"],
+             ["F2", "E2", "F2", "A2", "Bb2", "G2", "A2", "E2", "F2", "D2", "E2", "F2"]]
+    all_s1.append(notes)
+    all_fig.append("fig14")
+    t = [True] * 12
+    all_answers.append(t)
+
+    # fig 15, incorrect notes
+    notes = [["G3", "E3", "D3", "G3", "G3", "G3", "A3", "B3", "G3", "E4", "D4", "G3", "F#3", "G3"],
+             ["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"]]
+    all_s1.append(notes)
+    all_fig.append("fig15w")
+    t = [True] * len(notes[0])
+    t[9] = False
+    t[10] = False
+    all_answers.append(t)
+
+    # fig 15, correct notes
+    notes = [["G3", "E3", "D3", "G3", "G3", "G3", "A3", "B3", "G3", "C4", "A3", "G3", "F#3", "G3"],
+             ["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"]]
+    all_s1.append(notes)
+    all_fig.append("fig15c")
+    t = [True] * len(notes[0])
+    all_answers.append(t)
+
+    # fig 21, correct notes
+    notes = [["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"],
+             ["G2", "A2", "G2", "E2", "E2", "C2", "G2", "B2", "C3", "A2", "F#2", "G2", "F#2", "G2"]]
+    all_s1.append(notes)
+    all_fig.append("fig21")
+    t = [True] * len(notes[0])
+    all_answers.append(t)
+
+    # fig 22, correct notes
+    notes = [["A3", "E3", "G3", "F3", "E3", "C4", "A3", "B3", "B3", "A3", "G#3", "A3"],
+             ["A2", "C3", "B2", "D3", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"]]
+    all_s1.append(notes)
+    all_fig.append("fig22")
+    t = [True] * len(notes[0])
+    t[5] = False
+    all_answers.append(t)
+
+    # fig 23, correct notes
+    notes = [["A2", "C3", "B2", "D3", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"],
+             ["A2", "A2", "G2", "F2", "E2", "E2", "D2", "C2", "G2", "A2", "G#2", "A2"]]
+    all_s1.append(notes)
+    all_fig.append("fig23")
+    t = [True] * len(notes[0])
+    all_answers.append(t)
+
+    for i, (notes, answers) in enumerate(zip(all_s1, all_answers)):
         parts = notes_to_midi(notes)
         # C - todo FIX THIS! to handle strings like "C"
         key_signature = 0
         rules = rules_from_midi(parts, key_signature)
-        aok = analyze_2voice_rulesets(parts, rules, key_signature, species="species1")
-        r = [aok[0][n] == answers[n] for n in range(len(aok[0]))]
-        if all(r) == False:
-            raise ValueError("Test failed for note sequence {}".format(n))
+        aok = analyze_2voice_rulesets(parts, key_signature, species="species1")
+        all_ok = True
+        for a in aok[1]:
+            if a[1] is None or a[1] == answers[a[0]]:
+                pass
+            else:
+                all_ok = False
+        if all_ok == False:
+            #raise ValueError("Test failed for note sequence {}".format(n))
+            print("Test failed for note sequence {}, {}".format(i, all_fig[i]))
+    from IPython import embed; embed(); raise ValueError()
 
 
 if __name__ == "__main__":
