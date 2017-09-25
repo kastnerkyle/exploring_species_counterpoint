@@ -1561,7 +1561,8 @@ def rsp(rule):
     return rule.split("->")
 
 
-def key_start_rule(parts, key_signature, mode):
+def key_start_rule(parts, key_signature, mode, ignore_voices):
+    # ignore voices not used
     rules = rules_from_midi(parts, key_signature)
     rules = rules[0]
     key = key_signature_map[key_signature]
@@ -1586,7 +1587,7 @@ def key_start_rule(parts, key_signature, mode):
     return returns
 
 
-def next_step_rule(parts, key_signature, mode):
+def next_step_rule(parts, key_signature, mode, ignore_voices):
     rules = rules_from_midi(parts, key_signature)
     rules = rules[0]
     key = key_signature_map[key_signature]
@@ -1604,10 +1605,14 @@ def next_step_rule(parts, key_signature, mode):
         dn0 = np.diff(np.array(notes_to_midi([[tn0, ln0]])[0]))
         dn1 = np.diff(np.array(notes_to_midi([[tn1, ln1]])[0]))
         note_sets = [[ln0, tn0], [ln1, tn1]]
-        voice_ok = True
+        voice_ok = None
         msg = None
         for n, voice_step in enumerate([dn0, dn1]):
             this_step = intervals_map[-int(voice_step)]
+            if ignore_voices is not None and n in ignore_voices:
+                if msg is None:
+                    msg = "leap_rule: NONE, skipped voice"
+                continue
             if voice_ok is False:
                 continue
             if this_step in ["a4", "-a4"]:
@@ -1623,7 +1628,7 @@ def next_step_rule(parts, key_signature, mode):
     return returns
 
 
-def leap_rule(parts, key_signature, mode):
+def leap_rule(parts, key_signature, mode, ignore_voices):
     rules = rules_from_midi(parts, key_signature)
     rules = rules[0]
     key = key_signature_map[key_signature]
@@ -1633,6 +1638,10 @@ def leap_rule(parts, key_signature, mode):
         msg = None
         voice_ok = None
         for n in range(len(parts)):
+            if ignore_voices is not None and n in ignore_voices:
+                if msg is None:
+                    msg = "leap_rule: NONE, skipped voice"
+                continue
             prev_jmp = parts[n][i - 1] - parts[n][i - 2]
             cur_step = parts[n][i] - parts[n][i - 1]
             if abs(prev_jmp) > 3:
@@ -1652,7 +1661,8 @@ def leap_rule(parts, key_signature, mode):
     return returns
 
 
-def parallel_rule(parts, key_signature, mode):
+def parallel_rule(parts, key_signature, mode, ignore_voices):
+    # ignore voices not used
     rules = rules_from_midi(parts, key_signature)
     rules = rules[0]
     key = key_signature_map[key_signature]
@@ -1692,11 +1702,12 @@ all_rules_map = OrderedDict()
 all_rules_map["key_start_rule"] = key_start_rule
 all_rules_map["next_step_rule"] = next_step_rule
 all_rules_map["parallel_rule"] = parallel_rule
-all_rules_map["leap_rule"] = leap_rule
+# leap rule is not a rule :|
+#all_rules_map["leap_rule"] = leap_rule
 
-def check_species1_rule(parts, key_signature, mode):
+def check_species1_rule(parts, key_signature, mode, ignore_voices):
     key = key_signature_map[key_signature]
-    res = [all_rules_map[arm](parts, key_signature, mode) for arm in all_rules_map.keys()]
+    res = [all_rules_map[arm](parts, key_signature, mode, ignore_voices) for arm in all_rules_map.keys()]
 
     global_check = True
     for r in res:
@@ -1708,11 +1719,12 @@ def check_species1_rule(parts, key_signature, mode):
     return (global_check, res)
 
 
-def analyze_2voice_rulesets(parts, key_signature, species="species1"):
+def analyze_2voice_rulesets(parts, key_signature, species="species1", cantus_firmus_voices=None):
     rules = rules_from_midi(parts, key_signature)
     mode = estimate_mode(parts, rules, key_signature)
+    ignore_voices = cantus_firmus_voices
     if species == "species1":
-        r = check_species1_rule(parts, key_signature, mode)
+        r = check_species1_rule(parts, key_signature, mode, ignore_voices)
     else:
         raise ValueError("Unknown species argument {}".format(species))
     all_ok = r[0]
@@ -1725,130 +1737,136 @@ def analyze_2voice_rulesets(parts, key_signature, species="species1"):
 
 def test_species1():
     print("Running test for species1...")
-    all_s1 = []
-    all_answers = []
-    all_fig = []
+    all_ex = []
 
     # All figure numbers from Gradus ad Parnassum
     # fig 5, correct notes
-    notes = [["A3", "A3", "G3", "A3", "B3", "C4", "C4", "B3", "D4", "C#4", "D4"],
-             ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]]
-    all_s1.append(notes)
-    all_fig.append("fig5")
-    t = [True] * 11
-    all_answers.append(t)
+    ex = {"notes": [["A3", "A3", "G3", "A3", "B3", "C4", "C4", "B3", "D4", "C#4", "D4"],
+                    ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]],
+          "answers": [True] * 11,
+          "name": "fig5",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
 
     # fig 6, initial (incorrect) notes
-    notes = [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
-             ["G2", "D3", "A2", "F2", "E2", "D2", "F2", "C3", "D3", "C#3", "D3"]]
-    all_s1.append(notes)
-    all_fig.append("fig6w")
-    t = [True] * 11
-    t[0] = False
-    t[2] = False
-    all_answers.append(t)
+    ex = {"notes": [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
+                    ["G2", "D3", "A2", "F2", "E2", "D2", "F2", "C3", "D3", "C#3", "D3"]],
+          "answers": [True if n not in [0, 2] else False for n in range(11)],
+          "name": "fig6w",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
 
     # fig 6, correct notes
-    notes = [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
-             ["D2", "D2", "A2", "F2", "E2", "D2", "F2", "C3", "D3", "C#3", "D3"]]
-    all_s1.append(notes)
-    all_fig.append("fig6c")
-    t = [True] * 11
-    all_answers.append(t)
+    ex = {"notes": [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
+                    ["D2", "D2", "A2", "F2", "E2", "D2", "F2", "C3", "D3", "C#3", "D3"]],
+          "answers": [True] * 11,
+          "name": "fig6c",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
 
     # fig 11, correct notes
-    notes = [["B3", "C4", "F3", "G3", "A3", "C4", "B3", "E4", "D4", "E4"],
-             ["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"]]
-    all_s1.append(notes)
-    all_fig.append("fig11")
-    t = [True] * 10
-    t[5] = False
-    all_answers.append(t)
+    ex = {"notes": [["B3", "C4", "F3", "G3", "A3", "C4", "B3", "E4", "D4", "E4"],
+                    ["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"]],
+          "answers": [True] * 10,
+          "name": "fig11",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
 
     # fig 12, incorrect notes
-    notes = [["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"],
-             ["E2", "A2", "D2", "E2", "F2", "F2", "B2", "C3", "D3", "E3"]]
-    all_s1.append(notes)
-    all_fig.append("fig12")
-    t = [True] * 10
-    t[5] = False
-    t[6] = False
-    all_answers.append(t)
+    ex = {"notes": [["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"],
+                    ["E2", "A2", "D2", "E2", "F2", "F2", "B2", "C3", "D3", "E3"]],
+          "answers": [True if n not in [6,] else False for n in range(10)],
+          "name": "fig12w",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
 
     # fig 13, correct notes
-    notes = [["F3", "E3", "C3", "F3", "F3", "G3", "A3", "G3", "C3", "F3", "E3", "F3"],
-             ["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"]]
-    all_s1.append(notes)
-    all_fig.append("fig13")
-    t = [True] * 12
-    all_answers.append(t)
+    ex = {"notes": [["F3", "E3", "C3", "F3", "F3", "G3", "A3", "G3", "C3", "F3", "E3", "F3"],
+                    ["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"]],
+          "answers": [True] * 12,
+          "name": "fig13",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
 
     # fig 14, correct notes w/ voice crossing
-    notes = [["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"],
-             ["F2", "E2", "F2", "A2", "Bb2", "G2", "A2", "E2", "F2", "D2", "E2", "F2"]]
-    all_s1.append(notes)
-    all_fig.append("fig14")
-    t = [True] * 12
-    all_answers.append(t)
+    ex = {"notes": [["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"],
+                    ["F2", "E2", "F2", "A2", "Bb2", "G2", "A2", "E2", "F2", "D2", "E2", "F2"]],
+          "answers": [True] * 12,
+          "name": "fig14",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
 
     # fig 15, incorrect notes
-    notes = [["G3", "E3", "D3", "G3", "G3", "G3", "A3", "B3", "G3", "E4", "D4", "G3", "F#3", "G3"],
-             ["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"]]
-    all_s1.append(notes)
-    all_fig.append("fig15w")
-    t = [True] * len(notes[0])
-    t[9] = False
-    t[10] = False
-    all_answers.append(t)
+    ex = {"notes": [["G3", "E3", "D3", "G3", "G3", "G3", "A3", "B3", "G3", "E4", "D4", "G3", "F#3", "G3"],
+                    ["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"]],
+          "answers": [True if n not in [9, 10] else False for n in range(14)],
+          "name": "fig15w",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
 
     # fig 15, correct notes
-    notes = [["G3", "E3", "D3", "G3", "G3", "G3", "A3", "B3", "G3", "C4", "A3", "G3", "F#3", "G3"],
-             ["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"]]
-    all_s1.append(notes)
-    all_fig.append("fig15c")
-    t = [True] * len(notes[0])
-    all_answers.append(t)
+    ex = {"notes": [["G3", "E3", "D3", "G3", "G3", "G3", "A3", "B3", "G3", "C4", "A3", "G3", "F#3", "G3"],
+                    ["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"]],
+          "answers": [True] * 14,
+          "name": "fig15c",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
 
     # fig 21, correct notes
-    notes = [["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"],
-             ["G2", "A2", "G2", "E2", "E2", "C2", "G2", "B2", "C3", "A2", "F#2", "G2", "F#2", "G2"]]
-    all_s1.append(notes)
-    all_fig.append("fig21")
-    t = [True] * len(notes[0])
-    all_answers.append(t)
+    ex = {"notes": [["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"],
+                    ["G2", "A2", "G2", "E2", "E2", "C2", "G2", "B2", "C3", "A2", "F#2", "G2", "F#2", "G2"]],
+          "answers": [True] * 14,
+          "name": "fig21",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
 
     # fig 22, correct notes
-    notes = [["A3", "E3", "G3", "F3", "E3", "C4", "A3", "B3", "B3", "A3", "G#3", "A3"],
-             ["A2", "C3", "B2", "D3", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"]]
-    all_s1.append(notes)
-    all_fig.append("fig22")
-    t = [True] * len(notes[0])
-    t[5] = False
-    all_answers.append(t)
+    ex = {"notes": [["A3", "E3", "G3", "F3", "E3", "C4", "A3", "B3", "B3", "A3", "G#3", "A3"],
+                    ["A2", "C3", "B2", "D3", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"]],
+          # jumps by m6 in the given counterpoint?
+          "answers": [True if n not in [5,] else False for n in range(12)],
+          "name": "fig22",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
 
     # fig 23, correct notes
-    notes = [["A2", "C3", "B2", "D3", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"],
-             ["A2", "A2", "G2", "F2", "E2", "E2", "D2", "C2", "G2", "A2", "G#2", "A2"]]
-    all_s1.append(notes)
-    all_fig.append("fig23")
-    t = [True] * len(notes[0])
-    all_answers.append(t)
+    ex = {"notes": [["A2", "C3", "B2", "D3", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"],
+                    ["A2", "A2", "G2", "F2", "E2", "E2", "D2", "C2", "G2", "A2", "G#2", "A2"]],
+          "answers": [True] * 12,
+          "name": "fig23",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
 
-    for i, (notes, answers) in enumerate(zip(all_s1, all_answers)):
+    for ex in all_ex:
+        notes = ex["notes"]
+        answers = ex["answers"]
+        fig_name = ex["name"]
+        ig = [ex["cantus_firmus_voice"],]
         parts = notes_to_midi(notes)
         # C - todo FIX THIS! to handle strings like "C"
         key_signature = 0
-        rules = rules_from_midi(parts, key_signature)
-        aok = analyze_2voice_rulesets(parts, key_signature, species="species1")
-        all_ok = True
+        aok = analyze_2voice_rulesets(parts, key_signature, species="species1", cantus_firmus_voices=ig)
+        all_answers = [-1] * len(answers)
         for a in aok[1]:
-            if a[1] is None or a[1] == answers[a[0]]:
-                pass
+            if all_answers[a[0]] == -1:
+                all_answers[a[0]] = a[1]
             else:
-                all_ok = False
-        if all_ok == False:
-            #raise ValueError("Test failed for note sequence {}".format(n))
-            print("Test failed for note sequence {}, {}".format(i, all_fig[i]))
+                if a[1] in [None, True]:
+                    if all_answers[a[0]] == None:
+                        all_answers[a[0]] = True
+                    else:
+                        all_answers[a[0]] &= True
+                else:
+                    if all_answers[a[0]] == None:
+                        all_answers[a[0]] = False
+                    else:
+                        all_answers[a[0]] &= False
+        assert len(all_answers) == len(answers)
+        equal = [aa == a for aa, a in zip(all_answers, answers)]
+        if not all(equal):
+            print("Test FAIL for note sequence {}".format(fig_name))
+        else:
+            print("Test passed for note sequence {}".format(fig_name))
     from IPython import embed; embed(); raise ValueError()
 
 
