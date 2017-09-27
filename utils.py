@@ -1611,7 +1611,7 @@ def next_step_rule(parts, key_signature, mode, ignore_voices):
             this_step = intervals_map[-int(voice_step)]
             if ignore_voices is not None and n in ignore_voices:
                 if msg is None:
-                    msg = "leap_rule: NONE, skipped voice"
+                    msg = "next_step_rule: NONE, skipped voice"
                 continue
             if voice_ok is False:
                 continue
@@ -1647,6 +1647,7 @@ def leap_rule(parts, key_signature, mode, ignore_voices):
             if abs(prev_jmp) > 3:
                 is_opposite = math.copysign(1, cur_step) != math.copysign(1, prev_jmp)
                 is_step = abs(cur_step) == 1 or abs(cur_step) == 2
+                # check if it outlines a triad?
                 if is_opposite and is_step:
                     msg = "leap_rule: TRUE, voice {} leap of {} corrected".format(n, prev_jmp)
                     voice_ok = True
@@ -1698,16 +1699,34 @@ def parallel_rule(parts, key_signature, mode, ignore_voices):
             raise ValueError("parallel_rule: shouldn't get here")
     return returns
 
-all_rules_map = OrderedDict()
-all_rules_map["key_start_rule"] = key_start_rule
-all_rules_map["next_step_rule"] = next_step_rule
-all_rules_map["parallel_rule"] = parallel_rule
+species1_rules_map = OrderedDict()
+species1_rules_map["key_start_rule"] = key_start_rule
+species1_rules_map["next_step_rule"] = next_step_rule
+species1_rules_map["parallel_rule"] = parallel_rule
+
 # leap rule is not a rule :|
 #all_rules_map["leap_rule"] = leap_rule
 
-def check_species1_rule(parts, key_signature, mode, ignore_voices):
+def check_species1_rule(parts, durations, key_signature, mode, ignore_voices):
     key = key_signature_map[key_signature]
-    res = [all_rules_map[arm](parts, key_signature, mode, ignore_voices) for arm in all_rules_map.keys()]
+    res = [species1_rules_map[arm](parts, key_signature, mode, ignore_voices) for arm in species1_rules_map.keys()]
+
+    global_check = True
+    for r in res:
+        rr = [True if ri[0] is True or ri[0] is None else False for ri in r]
+        if all(rr):
+            pass
+        else:
+            global_check = False
+    return (global_check, res)
+
+species2_rules_map = OrderedDict()
+species2_rules_map["key_start_rule"] = key_start_rule
+species2_rules_map["next_step_rule"] = next_step_rule
+species2_rules_map["parallel_rule"] = parallel_rule
+def check_species2_rule(parts, durations, key_signature, mode, ignore_voices):
+    key = key_signature_map[key_signature]
+    res = [species2_rules_map[arm](parts, key_signature, mode, ignore_voices) for arm in species2_rules_map.keys()]
 
     global_check = True
     for r in res:
@@ -1719,12 +1738,16 @@ def check_species1_rule(parts, key_signature, mode, ignore_voices):
     return (global_check, res)
 
 
-def analyze_2voice_rulesets(parts, key_signature, species="species1", cantus_firmus_voices=None):
+
+def analyze_2voices(parts, durations, key_signature, species="species1",
+                    cantus_firmus_voices=None):
     rules = rules_from_midi(parts, key_signature)
     mode = estimate_mode(parts, rules, key_signature)
     ignore_voices = cantus_firmus_voices
     if species == "species1":
-        r = check_species1_rule(parts, key_signature, mode, ignore_voices)
+        r = check_species1_rule(parts, durations, key_signature, mode, ignore_voices)
+    elif species == "species2":
+        r = check_species2_rule(parts, durations, key_signature, mode, ignore_voices)
     else:
         raise ValueError("Unknown species argument {}".format(species))
     all_ok = r[0]
@@ -1743,6 +1766,7 @@ def test_species1():
     # fig 5, correct notes
     ex = {"notes": [["A3", "A3", "G3", "A3", "B3", "C4", "C4", "B3", "D4", "C#4", "D4"],
                     ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]],
+          "durations": [[4] * 11, [4] * 11],
           "answers": [True] * 11,
           "name": "fig5",
           "cantus_firmus_voice": 1}
@@ -1751,6 +1775,7 @@ def test_species1():
     # fig 6, initial (incorrect) notes
     ex = {"notes": [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
                     ["G2", "D3", "A2", "F2", "E2", "D2", "F2", "C3", "D3", "C#3", "D3"]],
+          "durations": [[4] * 11, [4] * 11],
           "answers": [True if n not in [0, 2] else False for n in range(11)],
           "name": "fig6w",
           "cantus_firmus_voice": 0}
@@ -1759,6 +1784,7 @@ def test_species1():
     # fig 6, correct notes
     ex = {"notes": [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
                     ["D2", "D2", "A2", "F2", "E2", "D2", "F2", "C3", "D3", "C#3", "D3"]],
+          "durations": [[4] * 11, [4] * 11],
           "answers": [True] * 11,
           "name": "fig6c",
           "cantus_firmus_voice": 0}
@@ -1767,6 +1793,7 @@ def test_species1():
     # fig 11, correct notes
     ex = {"notes": [["B3", "C4", "F3", "G3", "A3", "C4", "B3", "E4", "D4", "E4"],
                     ["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"]],
+          "durations": [[4] * 10, [4] * 10],
           "answers": [True] * 10,
           "name": "fig11",
           "cantus_firmus_voice": 1}
@@ -1775,6 +1802,7 @@ def test_species1():
     # fig 12, incorrect notes
     ex = {"notes": [["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"],
                     ["E2", "A2", "D2", "E2", "F2", "F2", "B2", "C3", "D3", "E3"]],
+          "durations": [[4] * 10, [4] * 10],
           "answers": [True if n not in [6,] else False for n in range(10)],
           "name": "fig12w",
           "cantus_firmus_voice": 0}
@@ -1783,6 +1811,7 @@ def test_species1():
     # fig 13, correct notes
     ex = {"notes": [["F3", "E3", "C3", "F3", "F3", "G3", "A3", "G3", "C3", "F3", "E3", "F3"],
                     ["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"]],
+          "durations": [[4] * 12, [4] * 12],
           "answers": [True] * 12,
           "name": "fig13",
           "cantus_firmus_voice": 1}
@@ -1791,6 +1820,7 @@ def test_species1():
     # fig 14, correct notes w/ voice crossing
     ex = {"notes": [["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"],
                     ["F2", "E2", "F2", "A2", "Bb2", "G2", "A2", "E2", "F2", "D2", "E2", "F2"]],
+          "durations": [[4] * 12, [4] * 12],
           "answers": [True] * 12,
           "name": "fig14",
           "cantus_firmus_voice": 0}
@@ -1799,6 +1829,7 @@ def test_species1():
     # fig 15, incorrect notes
     ex = {"notes": [["G3", "E3", "D3", "G3", "G3", "G3", "A3", "B3", "G3", "E4", "D4", "G3", "F#3", "G3"],
                     ["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"]],
+          "durations": [[4] * 14, [4] * 14],
           "answers": [True if n not in [9, 10] else False for n in range(14)],
           "name": "fig15w",
           "cantus_firmus_voice": 1}
@@ -1807,6 +1838,7 @@ def test_species1():
     # fig 15, correct notes
     ex = {"notes": [["G3", "E3", "D3", "G3", "G3", "G3", "A3", "B3", "G3", "C4", "A3", "G3", "F#3", "G3"],
                     ["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"]],
+          "durations": [[4] * 14, [4] * 14],
           "answers": [True] * 14,
           "name": "fig15c",
           "cantus_firmus_voice": 1}
@@ -1815,6 +1847,7 @@ def test_species1():
     # fig 21, correct notes
     ex = {"notes": [["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"],
                     ["G2", "A2", "G2", "E2", "E2", "C2", "G2", "B2", "C3", "A2", "F#2", "G2", "F#2", "G2"]],
+          "durations": [[4] * 14, [4] * 14],
           "answers": [True] * 14,
           "name": "fig21",
           "cantus_firmus_voice": 0}
@@ -1823,6 +1856,7 @@ def test_species1():
     # fig 22, correct notes
     ex = {"notes": [["A3", "E3", "G3", "F3", "E3", "C4", "A3", "B3", "B3", "A3", "G#3", "A3"],
                     ["A2", "C3", "B2", "D3", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"]],
+          "durations": [[4] * 12, [4] * 12],
           # jumps by m6 in the given counterpoint?
           "answers": [True if n not in [5,] else False for n in range(12)],
           "name": "fig22",
@@ -1832,9 +1866,57 @@ def test_species1():
     # fig 23, correct notes
     ex = {"notes": [["A2", "C3", "B2", "D3", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"],
                     ["A2", "A2", "G2", "F2", "E2", "E2", "D2", "C2", "G2", "A2", "G#2", "A2"]],
+          "durations": [[4] * 12, [4] * 12],
           "answers": [True] * 12,
           "name": "fig23",
           "cantus_firmus_voice": 0}
+    all_ex.append(ex)
+
+    for ex in all_ex:
+        notes = ex["notes"]
+        durations = ex["durations"]
+        answers = ex["answers"]
+        fig_name = ex["name"]
+        ig = [ex["cantus_firmus_voice"],]
+        parts = notes_to_midi(notes)
+        # C - todo FIX THIS! to handle strings like "C"
+        key_signature = 0
+        aok = analyze_2voices(parts, durations, key_signature, species="species1", cantus_firmus_voices=ig)
+        all_answers = [-1] * len(answers)
+        for a in aok[1]:
+            if all_answers[a[0]] == -1:
+                all_answers[a[0]] = a[1]
+            else:
+                if a[1] in [None, True]:
+                    if all_answers[a[0]] == None:
+                        all_answers[a[0]] = True
+                    else:
+                        all_answers[a[0]] &= True
+                else:
+                    if all_answers[a[0]] == None:
+                        all_answers[a[0]] = False
+                    else:
+                        all_answers[a[0]] &= False
+        assert len(all_answers) == len(answers)
+        equal = [aa == a for aa, a in zip(all_answers, answers)]
+        if not all(equal):
+            print("Test FAIL for note sequence {}".format(fig_name))
+        else:
+            print("Test passed for note sequence {}".format(fig_name))
+    from IPython import embed; embed(); raise ValueError()
+
+
+def test_species2():
+    print("Running test for species2...")
+    all_ex = []
+
+    # fig 26
+    ex = {"notes": [["A3", "D4", "A3", "B3", "C4", "G3", "A3", "D4", "B3", "G3", "A3", "B3", "C4", "A3", "D4", "B3", "C4", "A3", "B3", "C#4", "D4"],
+                    ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]],
+          "durations": [[2] * 21, [4] * 11],
+          "answers": [True if n not in [6,] else False for n in range(10)],
+          "name": "fig26",
+          "cantus_firmus_voice": 1}
     all_ex.append(ex)
 
     for ex in all_ex:
@@ -1845,7 +1927,8 @@ def test_species1():
         parts = notes_to_midi(notes)
         # C - todo FIX THIS! to handle strings like "C"
         key_signature = 0
-        aok = analyze_2voice_rulesets(parts, key_signature, species="species1", cantus_firmus_voices=ig)
+        aok = analyze_2voices(parts, durations, key_signature, species="species2",
+                              cantus_firmus_voices=ig)
         all_answers = [-1] * len(answers)
         for a in aok[1]:
             if all_answers[a[0]] == -1:
@@ -1879,6 +1962,7 @@ if __name__ == "__main__":
     print_it = args.p
     if not print_it:
         test_species1()
+        #test_species2()
     else:
         # fig 5, gradus ad parnassum
         notes = [["A3", "A3", "G3", "A3", "B3", "C4", "C4", "B3", "D4", "C#4", "D4"],
