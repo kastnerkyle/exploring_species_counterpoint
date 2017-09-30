@@ -7,6 +7,7 @@ import os
 import math
 import numpy as np
 import fractions
+import itertools
 
 # https://github.com/davidnalesnik/lilypond-roman-numeral-tool
 # http://lsr.di.unimi.it/LSR/Snippet?id=710
@@ -1334,7 +1335,89 @@ def notes_to_midi(notes):
         pitch_list.append(pitch_line)
     return pitch_list
 
-def intervals_from_midi(parts, full_name=False):
+
+def normalize_parts_with_durations(parts, durations):
+    value_durations = [[durations_map[dd] for dd in d] for d in durations]
+    cumulative_durations = [np.cumsum(vd) for vd in value_durations]
+    for n in range(len(parts)):
+        cumulative_durations[n] = np.concatenate(([0.], cumulative_durations[n]))
+
+    # everything is the same at the start
+    normed_parts = []
+    normed_durations = []
+    for n in range(len(parts)):
+        normed_parts.append([])
+        normed_durations.append([])
+    step_i = [0 for p in parts]
+    held_p_i = [-1 for p in parts]
+    finished = False
+    # should divide into .5, .33, .25, .125, .0625 (no support smaller than 64th notes...)
+    check_min = min([vd for d in value_durations for vd in d])
+    cumulative_max = max([cd for d in cumulative_durations for cd in d])
+
+    assert check_min >= .0625
+    time_inc = .005
+    time = 0.
+    prev_event_time = 0.
+
+    n_comb = 3
+    exact_timings = [0., 0.0625, 0.125, .25, 0.5, 1., 2., 4.]
+    all_exact_timings = list(itertools.product(exact_timings[3:], repeat=n_comb))
+    exact_timings = exact_timings[:3] + [sum(et) for et in all_exact_timings]
+
+    while not finished:
+        # move in small increments, but only append when an event triggers
+        # in any channel
+        # check if an event happened
+        is_event = False
+        which_events = []
+        for n in range(len(parts)):
+            if time < cumulative_durations[n][step_i[n]]:
+                pass
+            else:
+                is_event = True
+                which_events.append(n)
+
+
+        if is_event:
+            for n in range(len(parts)):
+                tt = round(time - prev_event_time, 4)
+                min_i = np.argmin([np.abs(et - tt) for et in exact_timings])
+                tt = exact_timings[min_i]
+                if n in which_events:
+                    normed_parts[n].append(parts[n][step_i[n]])
+                    normed_durations[n].append(tt)
+                    held_p_i[n] = parts[n][step_i[n]]
+                    step_i[n] += 1
+                else:
+                    normed_parts[n].append(held_p_i[n])
+                    normed_durations[n].append(tt)
+            prev_event_time = time
+        time += time_inc
+        if time >= cumulative_max:
+            for n in range(len(parts)):
+                # backfill the final timestep...
+                tt = round(cumulative_durations[n][-1] - prev_event_time, 4)
+                min_i = np.argmin([np.abs(et - tt) for et in exact_timings])
+                tt = exact_timings[min_i]
+                normed_durations[n].append(tt)
+            finished = True
+    normed_durations = [nd[1:] for nd in normed_durations]
+    normed_durations = [[inverse_durations_map[fracf(ndi)] for ndi in nd] for nd in normed_durations]
+    assert len(normed_parts) == len(normed_durations)
+    assert all([len(n_p) == len(n_d) for n_p, n_d in zip(normed_parts, normed_durations)])
+    return normed_parts, normed_durations
+
+
+def fixup_parts_durations(parts, durations):
+    if len(parts[0]) != len(parts[1]):
+        new_parts, new_durations = normalize_parts_with_durations(parts, durations)
+        parts = new_parts
+        durations = new_durations
+    return parts, durations
+
+
+def intervals_from_midi(parts, durations):
     if len(parts) < 2:
         raise ValueError("Must be at least 2 parts to compare intervals")
     if len(parts) > 2:
@@ -1342,8 +1425,17 @@ def intervals_from_midi(parts, full_name=False):
 
     intervals = []
     this_intervals = []
+
+    parts, durations = fixup_parts_durations(parts, durations)
+
+    assert len(parts) == len(durations)
+    for p, d in zip(parts, durations):
+        assert len(p) == len(d)
+
     proposed = np.array(parts[0]) - np.array(parts[1])
     for p in proposed:
+        this_intervals.append(intervals_map[p])
+        """
         # strip off name
         if full_name:
             this_intervals.append(intervals_map[p])
@@ -1353,12 +1445,17 @@ def intervals_from_midi(parts, full_name=False):
                 this_intervals.append(nm[1:])
             else:
                 this_intervals.append(nm[2:])
+        """
     intervals.append(this_intervals)
     return intervals
 
-def motion_from_midi(parts):
+
+def motion_from_midi(parts, durations):
     if len(parts) != 2:
         raise ValueError("NYI")
+
+    parts, durations = fixup_parts_durations(parts, durations)
+
     # similar, oblique, contrary, direct
     p0 = np.array(parts[0])
     p1 = np.array(parts[1])
@@ -1385,9 +1482,11 @@ def motion_from_midi(parts):
     return [motions]
 
 
-def rules_from_midi(parts, key_signature):
-    full_intervals = intervals_from_midi(parts, True)
-    full_motions = motion_from_midi(parts)
+def rules_from_midi(parts, durations, key_signature):
+    parts, durations = fixup_parts_durations(parts, durations)
+    full_intervals = intervals_from_midi(parts, durations)
+    full_motions = motion_from_midi(parts, durations)
+
     assert len(full_intervals) == len(full_motions)
     all_rulesets = []
     i = 0
@@ -1432,7 +1531,13 @@ base_pitch_map = {"C": 0,
                   "B": 11}
 base_note_map = {v: k for k, v in base_pitch_map.items()}
 
-key_signature_map = {0: "C"}
+key_signature_map = {}
+key_signature_map["C"] = 0
+key_signature_inv_map = {v: k for k, v in key_signature_map.items()}
+
+time_signature_map = {}
+time_signature_map["4/4"] = (4, 1)
+
 key_check = {"C": ["C", "D", "E", "F", "G", "A", "B"]}
 intervals_map = {-16: "-M10",
                 -15: "-m10",
@@ -1474,6 +1579,24 @@ intervals_map = {-16: "-M10",
                 21: "M13"}
 
 inverse_intervals_map = {v: k for k, v in intervals_map.items()}
+
+def fracf(f):
+    return fractions.Fraction(f)
+
+inverse_durations_map = {fracf(8.): "\\breve",
+                         fracf(6.): ".4",
+                         fracf(4.): "4",
+                         fracf(3.): ".2",
+                         fracf(2.): "2",
+                         fracf(1.5): ".1",
+                         fracf(1.): "1",
+                         fracf(.75): ".8th",
+                         fracf(.5): "8th",
+                         fracf(.25): "16th",
+                         fracf(.125): "32nd",
+                         fracf(.0625): "64th"}
+
+durations_map = {v: k for k, v in inverse_durations_map.items()}
 
 perfect_intervals = {"P1": None,
                      "P8": None,
@@ -1528,13 +1651,14 @@ def make_rule(this_interval, this_motion, this_notes, key_signature,
                                   this_motion, this_interval,
                                   str_this_notes[0], str_this_notes[1])
     else:
-        key = key_signature_map[key_signature]
+        key = key_signature_inv_map[key_signature]
         str_notes = midi_to_notes([this_notes])[0]
         nt = reduced_template.format(key, str_notes[0], str_notes[1], this_motion, this_interval, str_notes[0], str_notes[1])
     return nt
 
 
-def estimate_mode(parts, rules, key_signature):
+def estimate_mode(parts, durations, rules, key_signature):
+    parts, durations = fixup_parts_durations(parts, durations)
     first_note = [p[0] for p in parts]
     final_notes = [p[-2:] for p in parts]
     final_notes = np.array(final_notes)
@@ -1561,11 +1685,11 @@ def rsp(rule):
     return rule.split("->")
 
 
-def key_start_rule(parts, key_signature, mode, ignore_voices):
+def key_start_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
     # ignore voices not used
-    rules = rules_from_midi(parts, key_signature)
+    rules = rules_from_midi(parts, durations, key_signature)
     rules = rules[0]
-    key = key_signature_map[key_signature]
+    key = key_signature_inv_map[key_signature]
     returns = []
     for rule in rules:
         last, this = rsp(rule)
@@ -1587,10 +1711,10 @@ def key_start_rule(parts, key_signature, mode, ignore_voices):
     return returns
 
 
-def next_step_rule(parts, key_signature, mode, ignore_voices):
-    rules = rules_from_midi(parts, key_signature)
+def next_step_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+    rules = rules_from_midi(parts, durations, key_signature)
     rules = rules[0]
-    key = key_signature_map[key_signature]
+    key = key_signature_inv_map[key_signature]
     returns = []
     for rule in rules:
         last, this = rsp(rule)
@@ -1628,10 +1752,10 @@ def next_step_rule(parts, key_signature, mode, ignore_voices):
     return returns
 
 
-def leap_rule(parts, key_signature, mode, ignore_voices):
+def leap_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
     rules = rules_from_midi(parts, key_signature)
     rules = rules[0]
-    key = key_signature_map[key_signature]
+    key = key_signature_inv_map[key_signature]
     returns = []
     returns.extend([(None, "leap_rule: NONE, not applicable")] * 2)
     for i in range(2, len(parts[0])):
@@ -1662,11 +1786,11 @@ def leap_rule(parts, key_signature, mode, ignore_voices):
     return returns
 
 
-def parallel_rule(parts, key_signature, mode, ignore_voices):
+def parallel_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
     # ignore voices not used
-    rules = rules_from_midi(parts, key_signature)
+    rules = rules_from_midi(parts, durations, key_signature)
     rules = rules[0]
-    key = key_signature_map[key_signature]
+    key = key_signature_inv_map[key_signature]
     returns = []
     for rule in rules:
         last, this = rsp(rule)
@@ -1696,7 +1820,46 @@ def parallel_rule(parts, key_signature, mode, ignore_voices):
         elif ti in harmonic_intervals or ti in neg_harmonic_intervals:
             returns.append((True, "parallel_rule: TRUE, all movements including {} allowed into interval {}".format(tm, ti)))
         else:
+            from IPython import embed; embed(); raise ValueError()
             raise ValueError("parallel_rule: shouldn't get here")
+    return returns
+
+
+def beat_parallel_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+    # ignore voices not used
+    rules = rules_from_midi(parts, durations, key_signature)
+    rules = rules[0]
+    key = key_signature_inv_map[key_signature]
+    returns = []
+    for rule in rules:
+        last, this = rsp(rule)
+        tm, ti, tn = this.split(":")
+        tn0, tn1 = tn.split(",")
+        try:
+            lm, li, ln = last.split(":")
+        except ValueError:
+            returns.append((None, "beat_parallel_rule: NONE, not applicable"))
+            continue
+        ln0, ln1 = ln.split(",")
+        dn0 = np.diff(np.array(notes_to_midi([[tn0, ln0]])[0]))
+        dn1 = np.diff(np.array(notes_to_midi([[tn1, ln1]])[0]))
+        note_sets = [[ln0, tn0], [ln1, tn1]]
+        if li == "M10" or li == "m10":
+            if ti == "P8":
+                # battuta octave
+                returns.append((False, "beat_parallel_rule: FALSE, battuta octave {}->{} disallowed on first beat".format(li, ti)))
+                continue
+        if ti in perfect_intervals or ti in neg_perfect_intervals:
+            if tm in allowed_perfect_motion:
+                returns.append((True, "beat_parallel_rule: TRUE, movement {} into perfect interval {} allowed".format(tm, ti)))
+                continue
+            else:
+                returns.append((False, "beat_parallel_rule: FALSE, movement {} into perfect interval {} not allowed".format(tm, ti)))
+                continue
+        elif ti in harmonic_intervals or ti in neg_harmonic_intervals:
+            returns.append((True, "beat_parallel_rule: TRUE, all movements including {} allowed into interval {}".format(tm, ti)))
+        else:
+            raise ValueError("beat_parallel_rule: shouldn't get here")
     return returns
 
 species1_rules_map = OrderedDict()
@@ -1707,9 +1870,8 @@ species1_rules_map["parallel_rule"] = parallel_rule
 # leap rule is not a rule :|
 #all_rules_map["leap_rule"] = leap_rule
 
-def check_species1_rule(parts, durations, key_signature, mode, ignore_voices):
-    key = key_signature_map[key_signature]
-    res = [species1_rules_map[arm](parts, key_signature, mode, ignore_voices) for arm in species1_rules_map.keys()]
+def check_species1_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+    res = [species1_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in species1_rules_map.keys()]
 
     global_check = True
     for r in res:
@@ -1724,9 +1886,9 @@ species2_rules_map = OrderedDict()
 species2_rules_map["key_start_rule"] = key_start_rule
 species2_rules_map["next_step_rule"] = next_step_rule
 species2_rules_map["parallel_rule"] = parallel_rule
-def check_species2_rule(parts, durations, key_signature, mode, ignore_voices):
-    key = key_signature_map[key_signature]
-    res = [species2_rules_map[arm](parts, key_signature, mode, ignore_voices) for arm in species2_rules_map.keys()]
+species2_rules_map["beat_parallel_rule"] = beat_parallel_rule
+def check_species2_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+    res = [species2_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in species2_rules_map.keys()]
 
     global_check = True
     for r in res:
@@ -1738,16 +1900,63 @@ def check_species2_rule(parts, durations, key_signature, mode, ignore_voices):
     return (global_check, res)
 
 
+def make_timings(durations, beats_per_measure, duration_unit):
+    # use normalized_durations?
+    if beats_per_measure != 4:
+        raise ValueError("beats per measure {} needs support in handle_durations".format(beats_per_measure))
 
-def analyze_2voices(parts, durations, key_signature, species="species1",
+    if duration_unit != 1:
+        raise ValueError("duration unit {} needs support in handle_durations".format(duration_unit))
+
+    # U for upbeat, D for downbeat?
+    all_lines = []
+    all_timings = []
+
+    if beats_per_measure == 4 and duration_unit == 1:
+        downbeats = [0.,]
+
+    value_durations = [[float(durations_map[di]) for di in d] for d in durations]
+    cumulative_starts = [np.concatenate(([0.], np.cumsum(vd)))[:-1] for vd in value_durations]
+    for cline in cumulative_starts:
+        this_lines = []
+        for cl in cline:
+            if cl % beats_per_measure in downbeats:
+                this_lines.append("D")
+            else:
+                this_lines.append("U")
+        all_lines.append(this_lines)
+    return all_lines
+
+
+def estimate_timing(parts, durations, time_signature):
+    # returns U or D for each part if it starts on upbeat or downbeat
+    parts, durations = fixup_parts_durations(parts, durations)
+    beats_per_measure = time_signature[0]
+    duration_unit = time_signature[1]
+    ud = make_timings(durations, beats_per_measure, duration_unit)
+    return ud
+
+
+def analyze_2voices(parts, durations, key_signature_str, time_signature_str, species="species1",
                     cantus_firmus_voices=None):
-    rules = rules_from_midi(parts, key_signature)
-    mode = estimate_mode(parts, rules, key_signature)
+    # not ideal but keeps stuff consistent
+    key_signature = key_signature_map[key_signature_str]
+    # just check that it parses here
+    time_signature = time_signature_map[time_signature_str]
+    beats_per_measure = time_signature[0]
+    duration_unit = time_signature[1]
+
+    parts, durations = fixup_parts_durations(parts, durations)
+
+    rules = rules_from_midi(parts, durations, key_signature)
+    mode = estimate_mode(parts, durations, rules, key_signature)
+    timings = estimate_timing(parts, durations, time_signature)
+
     ignore_voices = cantus_firmus_voices
     if species == "species1":
-        r = check_species1_rule(parts, durations, key_signature, mode, ignore_voices)
+        r = check_species1_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
     elif species == "species2":
-        r = check_species2_rule(parts, durations, key_signature, mode, ignore_voices)
+        r = check_species2_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
     else:
         raise ValueError("Unknown species argument {}".format(species))
     all_ok = r[0]
@@ -1766,7 +1975,7 @@ def test_species1():
     # fig 5, correct notes
     ex = {"notes": [["A3", "A3", "G3", "A3", "B3", "C4", "C4", "B3", "D4", "C#4", "D4"],
                     ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]],
-          "durations": [[4] * 11, [4] * 11],
+          "durations": [["4"] * 11, ["4"] * 11],
           "answers": [True] * 11,
           "name": "fig5",
           "cantus_firmus_voice": 1}
@@ -1775,7 +1984,7 @@ def test_species1():
     # fig 6, initial (incorrect) notes
     ex = {"notes": [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
                     ["G2", "D3", "A2", "F2", "E2", "D2", "F2", "C3", "D3", "C#3", "D3"]],
-          "durations": [[4] * 11, [4] * 11],
+          "durations": [["4"] * 11, ["4"] * 11],
           "answers": [True if n not in [0, 2] else False for n in range(11)],
           "name": "fig6w",
           "cantus_firmus_voice": 0}
@@ -1784,7 +1993,7 @@ def test_species1():
     # fig 6, correct notes
     ex = {"notes": [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
                     ["D2", "D2", "A2", "F2", "E2", "D2", "F2", "C3", "D3", "C#3", "D3"]],
-          "durations": [[4] * 11, [4] * 11],
+          "durations": [["4"] * 11, ["4"] * 11],
           "answers": [True] * 11,
           "name": "fig6c",
           "cantus_firmus_voice": 0}
@@ -1793,7 +2002,7 @@ def test_species1():
     # fig 11, correct notes
     ex = {"notes": [["B3", "C4", "F3", "G3", "A3", "C4", "B3", "E4", "D4", "E4"],
                     ["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"]],
-          "durations": [[4] * 10, [4] * 10],
+          "durations": [["4"] * 10, ["4"] * 10],
           "answers": [True] * 10,
           "name": "fig11",
           "cantus_firmus_voice": 1}
@@ -1802,7 +2011,7 @@ def test_species1():
     # fig 12, incorrect notes
     ex = {"notes": [["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"],
                     ["E2", "A2", "D2", "E2", "F2", "F2", "B2", "C3", "D3", "E3"]],
-          "durations": [[4] * 10, [4] * 10],
+          "durations": [["4"] * 10, ["4"] * 10],
           "answers": [True if n not in [6,] else False for n in range(10)],
           "name": "fig12w",
           "cantus_firmus_voice": 0}
@@ -1811,7 +2020,7 @@ def test_species1():
     # fig 13, correct notes
     ex = {"notes": [["F3", "E3", "C3", "F3", "F3", "G3", "A3", "G3", "C3", "F3", "E3", "F3"],
                     ["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"]],
-          "durations": [[4] * 12, [4] * 12],
+          "durations": [["4"] * 12, ["4"] * 12],
           "answers": [True] * 12,
           "name": "fig13",
           "cantus_firmus_voice": 1}
@@ -1820,7 +2029,7 @@ def test_species1():
     # fig 14, correct notes w/ voice crossing
     ex = {"notes": [["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"],
                     ["F2", "E2", "F2", "A2", "Bb2", "G2", "A2", "E2", "F2", "D2", "E2", "F2"]],
-          "durations": [[4] * 12, [4] * 12],
+          "durations": [["4"] * 12, ["4"] * 12],
           "answers": [True] * 12,
           "name": "fig14",
           "cantus_firmus_voice": 0}
@@ -1829,7 +2038,7 @@ def test_species1():
     # fig 15, incorrect notes
     ex = {"notes": [["G3", "E3", "D3", "G3", "G3", "G3", "A3", "B3", "G3", "E4", "D4", "G3", "F#3", "G3"],
                     ["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"]],
-          "durations": [[4] * 14, [4] * 14],
+          "durations": [["4"] * 14, ["4"] * 14],
           "answers": [True if n not in [9, 10] else False for n in range(14)],
           "name": "fig15w",
           "cantus_firmus_voice": 1}
@@ -1838,7 +2047,7 @@ def test_species1():
     # fig 15, correct notes
     ex = {"notes": [["G3", "E3", "D3", "G3", "G3", "G3", "A3", "B3", "G3", "C4", "A3", "G3", "F#3", "G3"],
                     ["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"]],
-          "durations": [[4] * 14, [4] * 14],
+          "durations": [["4"] * 14, ["4"] * 14],
           "answers": [True] * 14,
           "name": "fig15c",
           "cantus_firmus_voice": 1}
@@ -1847,7 +2056,7 @@ def test_species1():
     # fig 21, correct notes
     ex = {"notes": [["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"],
                     ["G2", "A2", "G2", "E2", "E2", "C2", "G2", "B2", "C3", "A2", "F#2", "G2", "F#2", "G2"]],
-          "durations": [[4] * 14, [4] * 14],
+          "durations": [["4"] * 14, ["4"] * 14],
           "answers": [True] * 14,
           "name": "fig21",
           "cantus_firmus_voice": 0}
@@ -1856,7 +2065,7 @@ def test_species1():
     # fig 22, correct notes
     ex = {"notes": [["A3", "E3", "G3", "F3", "E3", "C4", "A3", "B3", "B3", "A3", "G#3", "A3"],
                     ["A2", "C3", "B2", "D3", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"]],
-          "durations": [[4] * 12, [4] * 12],
+          "durations": [["4"] * 12, ["4"] * 12],
           # jumps by m6 in the given counterpoint?
           "answers": [True if n not in [5,] else False for n in range(12)],
           "name": "fig22",
@@ -1866,7 +2075,7 @@ def test_species1():
     # fig 23, correct notes
     ex = {"notes": [["A2", "C3", "B2", "D3", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"],
                     ["A2", "A2", "G2", "F2", "E2", "E2", "D2", "C2", "G2", "A2", "G#2", "A2"]],
-          "durations": [[4] * 12, [4] * 12],
+          "durations": [["4"] * 12, ["4"] * 12],
           "answers": [True] * 12,
           "name": "fig23",
           "cantus_firmus_voice": 0}
@@ -1879,9 +2088,16 @@ def test_species1():
         fig_name = ex["name"]
         ig = [ex["cantus_firmus_voice"],]
         parts = notes_to_midi(notes)
-        # C - todo FIX THIS! to handle strings like "C"
-        key_signature = 0
-        aok = analyze_2voices(parts, durations, key_signature, species="species1", cantus_firmus_voices=ig)
+        # TODO: handle strings like "C"
+        key_signature = "C"
+        # as in sheet music
+        time_signature = "4/4"
+        # durations can be "64th", "32nd", "16th", "8th", "1", "2", "4", "8"
+        # also any of these can be dotted (".") e.g. ".8th" (dotted eighth)
+        # or summed for a tie "1+8th"
+        # TODO: Triplets?
+        aok = analyze_2voices(parts, durations, key_signature, time_signature,
+                              species="species1", cantus_firmus_voices=ig)
         all_answers = [-1] * len(answers)
         for a in aok[1]:
             if all_answers[a[0]] == -1:
@@ -1913,7 +2129,7 @@ def test_species2():
     # fig 26
     ex = {"notes": [["A3", "D4", "A3", "B3", "C4", "G3", "A3", "D4", "B3", "G3", "A3", "B3", "C4", "A3", "D4", "B3", "C4", "A3", "B3", "C#4", "D4"],
                     ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]],
-          "durations": [[2] * 21, [4] * 11],
+          "durations": [["2"] * 20 + ["4"], ["4"] * 11],
           "answers": [True if n not in [6,] else False for n in range(10)],
           "name": "fig26",
           "cantus_firmus_voice": 1}
@@ -1921,14 +2137,16 @@ def test_species2():
 
     for ex in all_ex:
         notes = ex["notes"]
+        durations = ex["durations"]
         answers = ex["answers"]
         fig_name = ex["name"]
         ig = [ex["cantus_firmus_voice"],]
         parts = notes_to_midi(notes)
         # C - todo FIX THIS! to handle strings like "C"
-        key_signature = 0
-        aok = analyze_2voices(parts, durations, key_signature, species="species2",
-                              cantus_firmus_voices=ig)
+        key_signature = "C"
+        time_signature = "4/4"
+        aok = analyze_2voices(parts, durations, key_signature, time_signature,
+                              species="species2", cantus_firmus_voices=ig)
         all_answers = [-1] * len(answers)
         for a in aok[1]:
             if all_answers[a[0]] == -1:
@@ -1961,15 +2179,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print_it = args.p
     if not print_it:
-        test_species1()
-        #test_species2()
+        #test_species1()
+        test_species2()
     else:
         # fig 5, gradus ad parnassum
         notes = [["A3", "A3", "G3", "A3", "B3", "C4", "C4", "B3", "D4", "C#4", "D4"],
                  ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]]
         clefs = ["treble", "treble"]
         parts = notes_to_midi(notes)
-        interval_figures = intervals_from_midi(parts)
+        interval_figures = intervals_from_midi(parts, durations)
         durations = [[4.] * len(notes[0]), [4.] * len(notes[1])]
         # can add harmonic nnotations as well to plot
         #chord_annotations = ["i", "I6", "IV", "V6", "I", "IV6", "I64", "V", "I"]
