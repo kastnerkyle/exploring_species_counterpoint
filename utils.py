@@ -1792,7 +1792,7 @@ def parallel_rule(parts, durations, key_signature, time_signature, mode, timings
     rules = rules[0]
     key = key_signature_inv_map[key_signature]
     returns = []
-    for rule in rules:
+    for idx, rule in enumerate(rules):
         last, this = rsp(rule)
         tm, ti, tn = this.split(":")
         tn0, tn1 = tn.split(",")
@@ -1817,15 +1817,52 @@ def parallel_rule(parts, durations, key_signature, time_signature, mode, timings
             else:
                 returns.append((False, "parallel_rule: FALSE, movement {} into perfect interval {} not allowed".format(tm, ti)))
                 continue
-        elif ti in harmonic_intervals or ti in neg_harmonic_intervals:
+        elif ti in harmonic_intervals or ti in neg_harmonic_intervals or ti == "a4":
             returns.append((True, "parallel_rule: TRUE, all movements including {} allowed into interval {}".format(tm, ti)))
         else:
-            from IPython import embed; embed(); raise ValueError()
             raise ValueError("parallel_rule: shouldn't get here")
     return returns
 
 
 def beat_parallel_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+    # ignore voices not used
+    rules = rules_from_midi(parts, durations, key_signature)
+    rules = rules[0]
+    key = key_signature_inv_map[key_signature]
+    returns = []
+    for idx, rule in enumerate(rules):
+        last, this = rsp(rule)
+        tm, ti, tn = this.split(":")
+        tn0, tn1 = tn.split(",")
+        try:
+            lm, li, ln = last.split(":")
+        except ValueError:
+            returns.append((None, "beat_parallel_rule: NONE, not applicable"))
+            continue
+        ln0, ln1 = ln.split(",")
+
+        dn0 = np.diff(np.array(notes_to_midi([[tn0, ln0]])[0]))
+        dn1 = np.diff(np.array(notes_to_midi([[tn1, ln1]])[0]))
+        note_sets = [[ln0, tn0], [ln1, tn1]]
+
+        if ti in ["P8", "P5"]:
+            if idx < 2:
+                returns.append((True, "beat_parallel_rule: TRUE, no earlier parallel move"))
+                continue
+            plast, pthis = rsp(rules[idx - 2])
+            pm, pi, pn = pthis.split(":")
+            if pi in ["P8", "P5"] and pi == ti:
+                # check beats - use the 0th voice?
+                if "D" == timings[0][idx] and "D" == timings[0][idx - 2] and abs(inverse_intervals_map[li]) < 5:
+                    returns.append((False, "beat_parallel_rule: FALSE, previous downbeat had parallel perfect interval {}".format(pi)))
+                    continue
+            returns.append((True, "beat_parallel_rule: TRUE, no beat parallel move"))
+        else:
+            returns.append((True, "beat_parallel_rule: TRUE, no beat parallel move"))
+    return returns
+
+
+def passing_tone_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
     # ignore voices not used
     rules = rules_from_midi(parts, durations, key_signature)
     rules = rules[0]
@@ -1838,7 +1875,7 @@ def beat_parallel_rule(parts, durations, key_signature, time_signature, mode, ti
         try:
             lm, li, ln = last.split(":")
         except ValueError:
-            returns.append((None, "beat_parallel_rule: NONE, not applicable"))
+            returns.append((None, "passing_tone_rule: NONE, not applicable"))
             continue
         ln0, ln1 = ln.split(",")
         dn0 = np.diff(np.array(notes_to_midi([[tn0, ln0]])[0]))
@@ -1847,19 +1884,19 @@ def beat_parallel_rule(parts, durations, key_signature, time_signature, mode, ti
         if li == "M10" or li == "m10":
             if ti == "P8":
                 # battuta octave
-                returns.append((False, "beat_parallel_rule: FALSE, battuta octave {}->{} disallowed on first beat".format(li, ti)))
+                returns.append((False, "passing_tone_rule: FALSE, battuta octave {}->{} disallowed on first beat".format(li, ti)))
                 continue
         if ti in perfect_intervals or ti in neg_perfect_intervals:
             if tm in allowed_perfect_motion:
-                returns.append((True, "beat_parallel_rule: TRUE, movement {} into perfect interval {} allowed".format(tm, ti)))
+                returns.append((True, "passing_tone_rule: TRUE, movement {} into perfect interval {} allowed".format(tm, ti)))
                 continue
             else:
-                returns.append((False, "beat_parallel_rule: FALSE, movement {} into perfect interval {} not allowed".format(tm, ti)))
+                returns.append((False, "passing_tone_rule: FALSE, movement {} into perfect interval {} not allowed".format(tm, ti)))
                 continue
-        elif ti in harmonic_intervals or ti in neg_harmonic_intervals:
-            returns.append((True, "beat_parallel_rule: TRUE, all movements including {} allowed into interval {}".format(tm, ti)))
+        elif ti in harmonic_intervals or ti in neg_harmonic_intervals or ti == "a4":
+            returns.append((True, "passing_tone_rule: TRUE, all movements including {} allowed into interval {}".format(tm, ti)))
         else:
-            raise ValueError("beat_parallel_rule: shouldn't get here")
+            raise ValueError("passing_tone_rule: shouldn't get here")
     return returns
 
 species1_rules_map = OrderedDict()
@@ -1887,6 +1924,7 @@ species2_rules_map["key_start_rule"] = key_start_rule
 species2_rules_map["next_step_rule"] = next_step_rule
 species2_rules_map["parallel_rule"] = parallel_rule
 species2_rules_map["beat_parallel_rule"] = beat_parallel_rule
+#species2_rules_map["passing_tone_rule"] = passing_tone_rule
 def check_species2_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
     res = [species2_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in species2_rules_map.keys()]
 
@@ -2130,10 +2168,20 @@ def test_species2():
     ex = {"notes": [["A3", "D4", "A3", "B3", "C4", "G3", "A3", "D4", "B3", "G3", "A3", "B3", "C4", "A3", "D4", "B3", "C4", "A3", "B3", "C#4", "D4"],
                     ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]],
           "durations": [["2"] * 20 + ["4"], ["4"] * 11],
-          "answers": [True if n not in [6,] else False for n in range(10)],
+          "answers": [True if n not in [16, 18] else False for n in range(21)],
           "name": "fig26",
           "cantus_firmus_voice": 1}
     all_ex.append(ex)
+
+    # fig 33
+    ex = {"notes": [["A3", "D4", "A3", "B3", "C4", "G3", "A3", "D4", "B3", "C4", "D4", "A3", "C4", "D4", "E4", "B3", "D4", "A3", "B3", "C#4", "D4"],
+                    ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]],
+          "durations": [["2"] * 20 + ["4"], ["4"] * 11],
+          "answers": [True] * 21,
+          "name": "fig33",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
 
     for ex in all_ex:
         notes = ex["notes"]
@@ -2148,6 +2196,7 @@ def test_species2():
         aok = analyze_2voices(parts, durations, key_signature, time_signature,
                               species="species2", cantus_firmus_voices=ig)
         all_answers = [-1] * len(answers)
+
         for a in aok[1]:
             if all_answers[a[0]] == -1:
                 all_answers[a[0]] = a[1]
