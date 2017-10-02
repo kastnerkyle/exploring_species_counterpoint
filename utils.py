@@ -1318,7 +1318,11 @@ def notes_to_midi(notes):
     for nl in notes:
         pitch_line = []
         for nn in nl:
-            if "#" in nn:
+            if nn == "R":
+                base_pitch = 0
+                offset = 0
+                octave = 0
+            elif "#" in nn:
                 base_pitch = base[nn[0]]
                 offset = 1
                 octave = (int(nn[-1]) + 1) * 12
@@ -1433,8 +1437,20 @@ def intervals_from_midi(parts, durations):
         assert len(p) == len(d)
 
     proposed = np.array(parts[0]) - np.array(parts[1])
-    for p in proposed:
-        this_intervals.append(intervals_map[p])
+    for idx, p in enumerate(proposed):
+        try:
+            this_intervals.append(intervals_map[p])
+        except:
+            assert len(parts) == 2
+            if parts[0][idx] == 0:
+                # rest in part 0
+                #print("Possible rest in part0")
+                this_intervals.append("R" + intervals_map[0])
+
+            if parts[1][idx] == 0:
+                # rest in part 1
+                #print("Possible rest in part1")
+                this_intervals.append("R" + intervals_map[0])
         """
         # strip off name
         if full_name:
@@ -1605,7 +1621,8 @@ perfect_intervals = {"P1": None,
 neg_perfect_intervals = {"-P8": None,
                          "-P5": None,
                          "-P4": None}
-harmonic_intervals = {"P1": None,
+harmonic_intervals = {"RP1": None,
+                      "P1": None,
                       "P8": None,
                       "P5": None,
                       "P4": None,
@@ -1623,6 +1640,23 @@ neg_harmonic_intervals = {"-P8": None,
                           "-m6": None,
                           "-M6": None}
 
+nonharmonic_intervals = {"m2": None,
+                         "M2": None,
+                         "a4": None,
+                         "m7": None,
+                         "M7": None,
+                         "m9": None,
+                         "M9": None,
+                         "a11": None}
+neg_nonharmonic_intervals = {"-m2": None,
+                             "-M2": None,
+                             "-a4": None,
+                             "-m7": None,
+                             "-M7": None,
+                             "-m9": None,
+                             "-M9": None,
+                             "-a11": None}
+
 hamonic_intervals = {k: v for k, v in inverse_intervals_map.items()
                      if k in harmonic_intervals}
 
@@ -1634,6 +1668,9 @@ def midi_to_notes(parts):
     for p in parts:
         this_notes = []
         for pi in p:
+            if pi == 0:
+                this_notes.append("R")
+                continue
             octave = pi // 12 - 1
             pos = base_note_map[pi % 12]
             this_notes.append(pos + str(octave))
@@ -1699,13 +1736,13 @@ def key_start_rule(parts, durations, key_signature, time_signature, mode, timing
             # get rid of the K in the front
             lk = lk[1:]
             # check that note is in key?
-            if ti == "P8" or ti == "P5" or ti == "P1":
-                if lnb[:-1] == mode:
+            if ti == "P8" or ti == "P5" or ti == "P1" or ti == "RP1":
+                if lnb[:-1] == mode or lnb == "R":
                     returns.append((True, "key_start_rule: TRUE, start is in mode"))
                 else:
                     returns.append((False, "key_start_rule: FALSE, first bass note {} doesn't match estimated mode {}".format(lnb, mode)))
             else:
-                returns.append((False, "key_start_rule: FALSE, first interval {} is not in ['P5', 'P8']".format(ti)))
+                returns.append((False, "key_start_rule: FALSE, first interval {} is not in ['P1', 'P5', 'P8']".format(ti)))
         else:
             returns.append((None, "key_start_rule: NONE, not applicable"))
     return returns
@@ -1732,7 +1769,13 @@ def next_step_rule(parts, durations, key_signature, time_signature, mode, timing
         voice_ok = None
         msg = None
         for n, voice_step in enumerate([dn0, dn1]):
-            this_step = intervals_map[-int(voice_step)]
+            try:
+                this_step = intervals_map[-int(voice_step)]
+            except KeyError:
+                if note_sets[n][0] == "R":
+                    if msg is None:
+                        msg = "next_step_rule: NONE, rest in voice"
+                    continue
             if ignore_voices is not None and n in ignore_voices:
                 if msg is None:
                     msg = "next_step_rule: NONE, skipped voice"
@@ -1742,6 +1785,9 @@ def next_step_rule(parts, durations, key_signature, time_signature, mode, timing
             if this_step in ["a4", "-a4"]:
                 msg = "next_step_rule: FALSE, voice {} stepwise movement {}->{}, {} not allowed".format(n, note_sets[n][0], note_sets[n][1], this_step)
                 voice_ok = False
+            elif this_step in ["P8", "-P8"]:
+                msg = "next_step_rule: TRUE, voice {} skip {}->{}, {} acceptable".format(n, note_sets[n][0], note_sets[n][1], this_step)
+                voice_ok = True
             elif abs(int(voice_step)) > 7:
                 msg = "next_step_rule: FALSE, voice {} stepwise skip {}->{}, {} too large".format(n, note_sets[n][0], note_sets[n][1], this_step)
                 voice_ok = False
@@ -1817,9 +1863,12 @@ def parallel_rule(parts, durations, key_signature, time_signature, mode, timings
             else:
                 returns.append((False, "parallel_rule: FALSE, movement {} into perfect interval {} not allowed".format(tm, ti)))
                 continue
-        elif ti in harmonic_intervals or ti in neg_harmonic_intervals or ti == "a4":
+        elif ti in harmonic_intervals or ti in neg_harmonic_intervals or ti in nonharmonic_intervals or ti in neg_nonharmonic_intervals:
+            # allowed note check is elsewhere
             returns.append((True, "parallel_rule: TRUE, all movements including {} allowed into interval {}".format(tm, ti)))
         else:
+            print("parallel_rule: shouldn't get here")
+            from IPython import embed; embed(); raise ValueError()
             raise ValueError("parallel_rule: shouldn't get here")
     return returns
 
@@ -1845,6 +1894,7 @@ def beat_parallel_rule(parts, durations, key_signature, time_signature, mode, ti
         dn1 = np.diff(np.array(notes_to_midi([[tn1, ln1]])[0]))
         note_sets = [[ln0, tn0], [ln1, tn1]]
 
+        # rP1 is rest
         if ti in ["P8", "P5"]:
             if idx < 2:
                 returns.append((True, "beat_parallel_rule: TRUE, no earlier parallel move"))
@@ -1868,33 +1918,46 @@ def passing_tone_rule(parts, durations, key_signature, time_signature, mode, tim
     rules = rules[0]
     key = key_signature_inv_map[key_signature]
     returns = []
-    for rule in rules:
+    assert all([len(timings[i]) == len(timings[0]) for i in range(len(timings))])
+    for idx, rule in enumerate(rules):
         last, this = rsp(rule)
         tm, ti, tn = this.split(":")
         tn0, tn1 = tn.split(",")
-        try:
-            lm, li, ln = last.split(":")
-        except ValueError:
-            returns.append((None, "passing_tone_rule: NONE, not applicable"))
-            continue
-        ln0, ln1 = ln.split(",")
-        dn0 = np.diff(np.array(notes_to_midi([[tn0, ln0]])[0]))
-        dn1 = np.diff(np.array(notes_to_midi([[tn1, ln1]])[0]))
-        note_sets = [[ln0, tn0], [ln1, tn1]]
-        if li == "M10" or li == "m10":
-            if ti == "P8":
-                # battuta octave
-                returns.append((False, "passing_tone_rule: FALSE, battuta octave {}->{} disallowed on first beat".format(li, ti)))
-                continue
-        if ti in perfect_intervals or ti in neg_perfect_intervals:
-            if tm in allowed_perfect_motion:
-                returns.append((True, "passing_tone_rule: TRUE, movement {} into perfect interval {} allowed".format(tm, ti)))
-                continue
+
+        timing_i = timings[0][idx]
+        for n in range(len(timings)):
+            assert timings[n][idx] == timing_i
+
+        if timing_i == "D":
+            if ti in harmonic_intervals or ti in neg_harmonic_intervals:
+                returns.append((True, "passing_tone_rule: TRUE, harmonic interval {} allowed on downbeat".format(ti)))
             else:
-                returns.append((False, "passing_tone_rule: FALSE, movement {} into perfect interval {} not allowed".format(tm, ti)))
-                continue
-        elif ti in harmonic_intervals or ti in neg_harmonic_intervals or ti == "a4":
-            returns.append((True, "passing_tone_rule: TRUE, all movements including {} allowed into interval {}".format(tm, ti)))
+                returns.append((False, "passing_tone_rule: FALSE, non-harmic interval {} disallowed on downbeat".format(ti)))
+        elif timing_i == "U":
+            if ti in harmonic_intervals or ti in neg_harmonic_intervals:
+                returns.append((True, "passing_tone_rule: TRUE, harmonic interval {} allowed on downbeat".format(ti)))
+            else:
+                lm, li, ln = last.split(":")
+                ln0, ln1 = ln.split(",")
+                # passing tone check
+                pitches = np.array(notes_to_midi([[ln0, ln1], [tn0, tn1]]))
+                last_diffs = np.diff(pitches, axis=0)
+
+                this, nxt = rsp(rules[idx + 1])
+                nm, ni, nn = nxt.split(":")
+                nn0, nn1 = nn.split(",")
+                pitches = np.array(notes_to_midi([[tn0, tn1], [nn0, nn1]]))
+                nxt_diffs = np.diff(pitches, axis=0)
+
+                not_skip = [n for n in range(last_diffs.shape[1]) if n not in ignore_voices]
+                last_diffs = last_diffs[:, not_skip]
+                nxt_diffs = nxt_diffs[:, not_skip]
+                last_ok = np.where(np.abs(last_diffs) >= 3)[0]
+                nxt_ok = np.where(np.abs(nxt_diffs) >= 3)[0]
+                if len(last_ok) == 0 and len(nxt_ok) == 0:
+                    returns.append((True, "passing_tone_rule: TRUE, passing tones allowed on upbeat"))
+                else:
+                    returns.append((False, "passing_tone_rule: FALSE, non-passing tones not allowed on upbeat"))
         else:
             raise ValueError("passing_tone_rule: shouldn't get here")
     return returns
@@ -1921,10 +1984,10 @@ def check_species1_rule(parts, durations, key_signature, time_signature, mode, t
 
 species2_rules_map = OrderedDict()
 species2_rules_map["key_start_rule"] = key_start_rule
-species2_rules_map["next_step_rule"] = next_step_rule
 species2_rules_map["parallel_rule"] = parallel_rule
 species2_rules_map["beat_parallel_rule"] = beat_parallel_rule
-#species2_rules_map["passing_tone_rule"] = passing_tone_rule
+species2_rules_map["next_step_rule"] = next_step_rule
+species2_rules_map["passing_tone_rule"] = passing_tone_rule
 def check_species2_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
     res = [species2_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in species2_rules_map.keys()]
 
@@ -2180,6 +2243,15 @@ def test_species2():
           "answers": [True] * 21,
           "name": "fig33",
           "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 35
+    ex = {"notes": [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
+                    ["R", "D2", "D3", "A2", "C3", "A2", "B2", "A2", "G2", "B2", "D3", "E3", "F3", "C3", "E3", "B2", "D3", "D2", "A2", "C#3", "D3"]],
+          "durations": [["4"] * 11, ["2"] * 20 + ["4"]],
+          "answers": [True] * 21,
+          "name": "fig35",
+          "cantus_firmus_voice": 0}
     all_ex.append(ex)
 
 
