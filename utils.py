@@ -1631,7 +1631,9 @@ harmonic_intervals = {"RP1": None,
                       "m6": None,
                       "M6": None,
                       "m10": None,
-                      "M10": None}
+                      "M10": None,
+                      "m13": None,
+                      "M13": None}
 neg_harmonic_intervals = {"-P8": None,
                           "-P5": None,
                           "-P4": None,
@@ -1785,7 +1787,7 @@ def next_step_rule(parts, durations, key_signature, time_signature, mode, timing
             if this_step in ["a4", "-a4"]:
                 msg = "next_step_rule: FALSE, voice {} stepwise movement {}->{}, {} not allowed".format(n, note_sets[n][0], note_sets[n][1], this_step)
                 voice_ok = False
-            elif this_step in ["P8", "-P8"]:
+            elif this_step in ["P8", "-P8", "m6", "M6", "-m6", "-M6", "-M3", "-m3"]:
                 msg = "next_step_rule: TRUE, voice {} skip {}->{}, {} acceptable".format(n, note_sets[n][0], note_sets[n][1], this_step)
                 voice_ok = True
             elif abs(int(voice_step)) > 7:
@@ -1852,7 +1854,7 @@ def parallel_rule(parts, durations, key_signature, time_signature, mode, timings
         dn1 = np.diff(np.array(notes_to_midi([[tn1, ln1]])[0]))
         note_sets = [[ln0, tn0], [ln1, tn1]]
         if li == "M10" or li == "m10":
-            if ti == "P8":
+            if ti == "P8" and timings[0][idx] == "D":
                 # battuta octave
                 returns.append((False, "parallel_rule: FALSE, battuta octave {}->{} disallowed on first beat".format(li, ti)))
                 continue
@@ -1932,7 +1934,7 @@ def passing_tone_rule(parts, durations, key_signature, time_signature, mode, tim
             if ti in harmonic_intervals or ti in neg_harmonic_intervals:
                 returns.append((True, "passing_tone_rule: TRUE, harmonic interval {} allowed on downbeat".format(ti)))
             else:
-                returns.append((False, "passing_tone_rule: FALSE, non-harmic interval {} disallowed on downbeat".format(ti)))
+                returns.append((False, "passing_tone_rule: FALSE, non-harmonic interval {} disallowed on downbeat".format(ti)))
         elif timing_i == "U":
             if ti in harmonic_intervals or ti in neg_harmonic_intervals:
                 returns.append((True, "passing_tone_rule: TRUE, harmonic interval {} allowed on downbeat".format(ti)))
@@ -2051,6 +2053,7 @@ def analyze_2voices(parts, durations, key_signature_str, time_signature_str, spe
 
     rules = rules_from_midi(parts, durations, key_signature)
     mode = estimate_mode(parts, durations, rules, key_signature)
+    # TODO: should timings be part of beat, rather that "D", "U"?
     timings = estimate_timing(parts, durations, time_signature)
 
     ignore_voices = cantus_firmus_voices
@@ -2062,10 +2065,19 @@ def analyze_2voices(parts, durations, key_signature_str, time_signature_str, spe
         raise ValueError("Unknown species argument {}".format(species))
     all_ok = r[0]
     this_ok = []
+    true_false = OrderedDict()
+    true_false["True"] = []
+    true_false["False"] = []
     for rr in r[1]:
         for n in range(len(rr)):
             this_ok.append((n, rr[n][0], rr[n][1]))
-    return (all_ok, sorted(this_ok))
+            if rr[n][0] == True or rr[n][0] == None:
+                true_false["True"].append(n)
+            else:
+                true_false["False"].append(n)
+    true_false["True"] = sorted(list(set(true_false["True"])))
+    true_false["False"] = sorted(list(set(true_false["False"])))
+    return (all_ok, true_false, rules, sorted(this_ok))
 
 
 def test_species1():
@@ -2140,7 +2152,7 @@ def test_species1():
     ex = {"notes": [["G3", "E3", "D3", "G3", "G3", "G3", "A3", "B3", "G3", "E4", "D4", "G3", "F#3", "G3"],
                     ["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"]],
           "durations": [["4"] * 14, ["4"] * 14],
-          "answers": [True if n not in [9, 10] else False for n in range(14)],
+          "answers": [True if n not in [10,] else False for n in range(14)],
           "name": "fig15w",
           "cantus_firmus_voice": 1}
     all_ex.append(ex)
@@ -2167,8 +2179,7 @@ def test_species1():
     ex = {"notes": [["A3", "E3", "G3", "F3", "E3", "C4", "A3", "B3", "B3", "A3", "G#3", "A3"],
                     ["A2", "C3", "B2", "D3", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"]],
           "durations": [["4"] * 12, ["4"] * 12],
-          # jumps by m6 in the given counterpoint?
-          "answers": [True if n not in [5,] else False for n in range(12)],
+          "answers": [True] * 12,
           "name": "fig22",
           "cantus_firmus_voice": 1}
     all_ex.append(ex)
@@ -2199,8 +2210,11 @@ def test_species1():
         # TODO: Triplets?
         aok = analyze_2voices(parts, durations, key_signature, time_signature,
                               species="species1", cantus_firmus_voices=ig)
+        aok_lu = aok[1]
+        aok_rules = aok[2]
+
         all_answers = [-1] * len(answers)
-        for a in aok[1]:
+        for a in aok[-1]:
             if all_answers[a[0]] == -1:
                 all_answers[a[0]] = a[1]
             else:
@@ -2217,10 +2231,10 @@ def test_species1():
         assert len(all_answers) == len(answers)
         equal = [aa == a for aa, a in zip(all_answers, answers)]
         if not all(equal):
+            from IPython import embed; embed(); raise ValueError()
             print("Test FAIL for note sequence {}".format(fig_name))
         else:
             print("Test passed for note sequence {}".format(fig_name))
-    from IPython import embed; embed(); raise ValueError()
 
 
 def test_species2():
@@ -2254,6 +2268,95 @@ def test_species2():
           "cantus_firmus_voice": 0}
     all_ex.append(ex)
 
+    # fig 36
+    ex = {"notes": [["R", "B3", "C4", "B3", "A3", "B3", "C4", "G3", "A3", "B3", "C4", "A3", "B3", "D4", "E4", "D4", "C4", "D4", "E4"],
+                    ["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"]],
+          "durations": [["2"] * 18 + ["4"], ["4"] * 10],
+          "answers": [True] * 19,
+          "name": "fig36",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 37
+    ex = {"notes": [["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"],
+                    ["R", "E2", "A2", "G2", "F2", "D2", "E2", "C2", "F2", "C3", "F3", "D3", "E3", "D3", "C3", "B2", "A2", "D3", "E3"]],
+          "durations": [["4"] * 10, ["2"] * 18 + ["4"]],
+          "answers": [True] * 19,
+          "name": "fig37",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
+
+    # fig 38
+    ex = {"notes": [["R", "F3", "E3", "D3", "C3", "Bb2", "A2", "G2", "F2", "A2", "C3", "Bb2", "A2", "A3", "G3", "E3", "F3", "G3", "A3", "F3", "D3", "E3", "F3"],
+                    ["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"]],
+          "durations": [["2"] * 22 + ["4"], ["4"] * 12],
+          "answers": [True] * 23,
+          "name": "fig38",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 39
+    ex = {"notes": [["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"],
+                    ["R", "F2", "E2", "C2", "F2", "E2", "D2", "C2", "Bb1", "Bb2", "G2", "C3", "A2", "F2", "E2", "C2", "F2", "F1", "A1", "D2", "C2", "E2", "F2"]],
+          "durations": [["4"] * 12, ["2"] * 22 + ["4"]],
+          "answers": [True] * 23,
+          "name": "fig39",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
+
+    # fig 40
+    ex = {"notes": [["R", "G3", "E3", "F3", "G3", "A3", "B3", "A3", "G3", "C4", "B3", "C4", "D4", "C4", "B3", "A3", "G3", "F3", "E3", "C4", "B3", "A3", "G3", "D3", "E3", "F#3", "G3"],
+                    ["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"]],
+          "durations": [["2"] * 26 + ["4"], ["4"] * 14],
+          "answers": [True] * 27,
+          "name": "fig40",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 41
+    ex = {"notes": [["G2", "C3", "B2", "G2", "C3", "E3", "D3", "G3", "E3", "C3", "D3", "B2", "A2", "G2"],
+                    ["R", "G2", "E2", "F2", "G2", "F2", "E2", "D2", "C2", "E2", "C2", "C3", "B2", "A2", "G2", "B2", "C3", "B2", "A2", "G2", "F#2", "D2", "G2", "B1", "D2", "F#2", "G2"]],
+          "durations": [["4"] * 14, ["2"] * 26 + ["4"]],
+          "answers": [True] * 27,
+          "name": "fig41",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
+
+    # fig 42
+    ex = {"notes": [["R", "A3", "E3", "F3", "G3", "D3", "E3", "E4", "C4", "B3", "A3", "F3", "G3", "B3", "D4", "A3", "C4", "E3", "F#3", "G#3", "A3"],
+                    ["A2", "C3", "B2", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"]],
+          "durations": [["2"] * 20 + ["4"], ["4"] * 11],
+          "answers": [True] * 21,
+          "name": "fig42",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 43
+    ex = {"notes": [["A2", "C3", "B2", "D3", "C3", "E3", "F3", "E3", "D3", "C3", "B2", "A2"],
+                    ["R", "A1", "A2", "E2", "G2", "E2", "D2", "F2", "A2", "B2", "C3", "C2", "D2", "A1", "C2", "E2", "F2", "G2", "A2", "A1", "E2", "G#2", "A2"]],
+          "durations": [["4"] * 12, ["2"] * 22 + ["4"]],
+          "answers": [True] * 23,
+          "name": "fig43",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
+
+    # fig 44
+    ex = {"notes": [["R", "G3", "C4", "B3", "A3", "D4", "B3", "A3", "G3", "B3", "C4", "D4", "E4", "D4", "C4", "B3", "A3", "B3", "C4", "G3", "A3", "B3", "C4"],
+                    ["C3", "E3", "F3", "G3", "E3", "A3", "G3", "E3", "F3", "E3", "D3", "C3"]],
+          "durations": [["2"] * 22 + ["4"], ["4"] * 12],
+          "answers": [True] * 23,
+          "name": "fig44",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 45
+    ex = {"notes": [["C3", "E3", "F3", "G3", "E3", "A3", "G3", "E3", "F3", "E3", "D3", "C3"],
+                    ["R", "C2", "C3", "B2", "A2", "D3", "B2", "G2", "C3", "B2", "A2", "C3", "E3", "D3", "C3", "A2", "D3", "A2", "C3", "C2", "G2", "B2", "C3"]],
+          "durations": [["4"] * 12, ["2"] * 22 + ["4"]],
+          "answers": [True] * 23,
+          "name": "fig45",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
 
     for ex in all_ex:
         notes = ex["notes"]
@@ -2262,14 +2365,16 @@ def test_species2():
         fig_name = ex["name"]
         ig = [ex["cantus_firmus_voice"],]
         parts = notes_to_midi(notes)
-        # C - todo FIX THIS! to handle strings like "C"
         key_signature = "C"
         time_signature = "4/4"
         aok = analyze_2voices(parts, durations, key_signature, time_signature,
                               species="species2", cantus_firmus_voices=ig)
+        aok_lu = aok[1]
+        aok_rules = aok[2]
+
         all_answers = [-1] * len(answers)
 
-        for a in aok[1]:
+        for a in aok[-1]:
             if all_answers[a[0]] == -1:
                 all_answers[a[0]] = a[1]
             else:
@@ -2289,7 +2394,6 @@ def test_species2():
             print("Test FAIL for note sequence {}".format(fig_name))
         else:
             print("Test passed for note sequence {}".format(fig_name))
-    from IPython import embed; embed(); raise ValueError()
 
 
 if __name__ == "__main__":
@@ -2300,7 +2404,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print_it = args.p
     if not print_it:
-        #test_species1()
+        test_species1()
         test_species2()
     else:
         # fig 5, gradus ad parnassum
