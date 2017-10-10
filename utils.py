@@ -2070,7 +2070,7 @@ def sequence_step_rule(parts, durations, key_signature, time_signature, mode, ti
                         nxtnxt_ok = np.where(np.abs(nxtnxt_diffs) >= 3)[0]
                         nxtnxt_resolves = np.where(np.sign(nxtnxt_diffs) != np.sign(nxt_diffs))[0]
 
-                        # check that it resolves in cabiata...
+                        # check that it resolves in cambiata...
                         if len(nxt_ok) == 1 and len(nxtnxt_ok) == 0 and nni in harmonic_intervals and sum(nxtnxt_resolves) == 0:
                             if not_skip == [1]:
                                 info_tup = (tn1, nn1, nnn1)
@@ -2080,11 +2080,16 @@ def sequence_step_rule(parts, durations, key_signature, time_signature, mode, ti
                                 print("sequence_step_rule: other not_skip voices not yet supported...")
                                 from IPython import embed; embed(); raise ValueError()
 
-                            returns.append((True, "sequence_step_rule: TRUE, cambiata {} -> {} -> {} in voice {} detected at bar part 1.".format(info_tup[0], info_tup[1], info_tup[2], not_skip[0])))
+                            returns.append((True, "sequence_step_rule: TRUE, cambiata {}->{}->{} in voice {} detected at bar part 1. to 3.".format(info_tup[0], info_tup[1], info_tup[2], not_skip[0])))
                         else:
                             returns.append((False, "sequence_step_rule: FALSE, interval {} at bar part 1. not allowed, not a continuation or cambiata".format(ti)))
                 elif timing_i == 2.:
-                    returns.append((False, "sequence_step_rule: FALSE, cannot have non-harmonic interval {} on bar part 2.".format(ti)))
+                    # last and next must be harmonic, and must be continuation...
+                    if len(nxt_ok) == 0 and len(last_ok) == 0:
+                        if ni in harmonic_intervals or ni in neg_harmonic_intervals:
+                            returns.append((True, "sequence_step_rule: TRUE, interval {} at bar part 2. allowed as part of continuation".format(ti)))
+                        else:
+                            returns.append((False, "sequence_step_rule: FALSE, interval {} at bar part 2. not allowed, next interval not harmonic or no continuation".format(ti)))
                 elif timing_i == 3.:
                     if len(nxt_ok) == 0 and len(last_ok) == 0:
                         if ni in harmonic_intervals or ni in neg_harmonic_intervals:
@@ -2564,7 +2569,7 @@ def test_species3():
     all_ex = []
 
     # fig 55
-    ex = {"notes": [["D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "D4", "B3", "C4", "D4", "C4", "Bb3", "A3", "Bb3", "C4", "D4", "E4", "F4", "F3", "A3", "Bb3", "C4", "A3", "Bb3", "C4", "Bb3", "A3", "G3", "B3", "A3", "D3", "E3", "F3", "G3", "A3", "B3", "C#4", "D4"],
+    ex = {"notes": [["D3", "E3", "F3", "G3", "A3", "B3", "C4", "D4", "E4", "D4", "B3", "C4", "D4", "C4", "Bb3", "A3", "Bb3", "C4", "D4", "E4", "F4", "F3", "A3", "Bb3", "C4", "A3", "Bb3", "C4", "Bb3", "A3", "G3", "Bb3", "A3", "D3", "E3", "F3", "G3", "A3", "B3", "C#4", "D4"],
                     ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]],
           "durations": [["1"] * 40 + ["4"], ["4"] * 11],
           "answers": [True] * 41,
