@@ -2577,6 +2577,14 @@ def test_species3():
           "cantus_firmus_voice": 1}
     all_ex.append(ex)
 
+    ex = {"notes": [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
+                    ["D2", "E2", "F2", "G2", "A2", "D2", "A2", "B2", "C3", "B2", "G2", "A2", "B2", "A2", "G2", "F2", "E2", "E3", "B2", "C3", "D3", "A2", "D2", "E2", "F2", "G2", "A2", "B2", "C3", "D3", "E3", "C3", "D3", "A2", "D2", "D3", "C#3", "A2", "B2", "C3", "D3"]],
+          "durations": [["4"] * 11, ["1"] * 40 + ["4"]],
+          "answers": [True] * 41,
+          "name": "fig56",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
+
     for ex in all_ex:
         notes = ex["notes"]
         durations = ex["durations"]
@@ -2614,7 +2622,7 @@ def test_species3():
             print("Test FAIL for note sequence {}".format(fig_name))
         else:
             print("Test passed for note sequence {}".format(fig_name))
-        from IPython import embed; embed(); raise ValueError()
+    from IPython import embed; embed(); raise ValueError()
 
 
 
