@@ -1619,10 +1619,14 @@ durations_map = {v: k for k, v in inverse_durations_map.items()}
 perfect_intervals = {"P1": None,
                      "P8": None,
                      "P5": None,
-                     "P4": None}
+                     "P4": None,
+                     "P11": None,
+                     "P12": None}
 neg_perfect_intervals = {"-P8": None,
                          "-P5": None,
-                         "-P4": None}
+                         "-P4": None,
+                         "-P11": None,
+                         "-P12": None}
 harmonic_intervals = {"RP1": None,
                       "P1": None,
                       "P8": None,
@@ -1634,6 +1638,8 @@ harmonic_intervals = {"RP1": None,
                       "M6": None,
                       "m10": None,
                       "M10": None,
+                      "P11": None,
+                      "P12": None,
                       "m13": None,
                       "M13": None}
 neg_harmonic_intervals = {"-P8": None,
@@ -1642,7 +1648,9 @@ neg_harmonic_intervals = {"-P8": None,
                           "-m3": None,
                           "-M3": None,
                           "-m6": None,
-                          "-M6": None}
+                          "-M6": None,
+                          "-P11": None,
+                          "-P12": None}
 
 nonharmonic_intervals = {"m2": None,
                          "M2": None,
@@ -2097,7 +2105,8 @@ def sequence_step_rule(parts, durations, key_signature, time_signature, mode, ti
                         else:
                             returns.append((False, "sequence_step_rule: FALSE, interval {} at bar part 3. not allowed, next interval not harmonic".format(ti)))
                     else:
-                        returns.append((False, "sequence_step_rule: FALSE, interval {} at bar part 3. not allowed, not a continuation".format(ti)))
+                        print("sequence_step_rule, timing 3. edge case")
+                        from IPython import embed; embed(); raise ValueError()
                 else:
                     print("sequence_step_rule: shouldn't get here")
                     from IPython import embed; embed(); raise ValueError()
@@ -2577,11 +2586,33 @@ def test_species3():
           "cantus_firmus_voice": 1}
     all_ex.append(ex)
 
+    # fig 56
     ex = {"notes": [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
                     ["D2", "E2", "F2", "G2", "A2", "D2", "A2", "B2", "C3", "B2", "G2", "A2", "B2", "A2", "G2", "F2", "E2", "E3", "B2", "C3", "D3", "A2", "D2", "E2", "F2", "G2", "A2", "B2", "C3", "D3", "E3", "C3", "D3", "A2", "D2", "D3", "C#3", "A2", "B2", "C3", "D3"]],
           "durations": [["4"] * 11, ["1"] * 40 + ["4"]],
           "answers": [True] * 41,
           "name": "fig56",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
+
+    # fig 57
+    ex = {"notes": [["B3", "G3", "A3", "B3", "C4", "B3", "A3", "G3", "F3", "G3", "A3", "B3", "C4", "E3", "F3", "G3", "A3", "C4", "E4", "D4", "C4", "B3", "A3", "C4", "B3", "D4", "B3", "A3", "G3", "B3", "C4", "B3", "A3", "B3", "C4", "D4", "E4"],
+                     ["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"]],
+          "durations": [["1"] * 36 + ["4"], ["4"] * 10],
+          "answers": [True] * 37,
+          "name": "fig57",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 58
+    ex = {"notes": [["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"],
+                    ["E2", "F2", "G2", "E2", "A2", "G2", "F2", "E2", "D2", "E2", "F2", "G2",
+                     "A2", "E2", "A2", "G2", "F2", "E2", "D2", "E2", "F2", "G2", "A2", "B2",
+                     "C3", "D3", "E3", "D3", "C3", "C2", "C3", "B2", "A2", "D3", "A2", "D3",
+                     "E3"]],
+          "durations": [["4"] * 10, ["1"] * 36 + ["4"]],
+          "answers": [True] * 37,
+          "name": "fig58",
           "cantus_firmus_voice": 0}
     all_ex.append(ex)
 
