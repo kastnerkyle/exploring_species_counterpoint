@@ -1649,6 +1649,8 @@ neg_harmonic_intervals = {"-P8": None,
                           "-M3": None,
                           "-m6": None,
                           "-M6": None,
+                          "-m10": None,
+                          "-M10": None,
                           "-P11": None,
                           "-P12": None}
 
@@ -2614,6 +2616,31 @@ def test_species3():
           "answers": [True] * 37,
           "name": "fig58",
           "cantus_firmus_voice": 0}
+    all_ex.append(ex)
+
+    # fig 59
+    ex = {"notes": [["F3", "E3", "D3", "C3", "B2", "D3", "G3", "F3", "E3", "D3", "C3", "Bb2",
+                     "A2", "C3", "D3", "E3", "F3", "D3", "E3", "F3", "G3", "E3", "F3", "G3",
+                     "A3", "G3", "F3", "A3", "G3", "F3", "E3", "D3", "C3", "E3", "C3", "E3",
+                     "F3", "E3", "D3", "C3", "Bb2", "C3", "D3", "E3", "F3"],
+                    ["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"]],
+          "durations": [["1"] * 44 + ["4"], ["4"] * 12],
+          "answers": [True] * 45,
+          "name": "fig59",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 60
+    # swap top and bottom around, weird notation but "bass" is in top on paper
+    ex = {"notes": [["F2", "F3", "E3", "D3", "E3", "C3", "D3", "E3", "F3", "E3", "D3", "C3",
+                     "D3", "C3", "Bb2", "A2", "Bb2", "F3", "Bb3", "A3", "G3", "C3", "C4", "Bb3",
+                     "A3", "G3", "F3", "D3", "E3", "C3", "D3", "E3", "F3", "E3", "D3", "C3",
+                     "D3", "E3", "F3", "D3", "E3", "C3", "D3", "E3", "F3"],
+                    ["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"]],
+          "durations": [["1"] * 44 + ["4"], ["4"] * 12],
+          "answers": [True] * 45,
+          "name": "fig60",
+          "cantus_firmus_voice": 1}
     all_ex.append(ex)
 
     for ex in all_ex:
