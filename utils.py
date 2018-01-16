@@ -928,6 +928,7 @@ def plot_lilypond(upper_voices, lower_voices=None, own_staves=False,
                   time_signatures=None,
                   chord_annotations=None,
                   interval_figures=None,
+                  interval_durations=None,
                   use_clefs=None,
                   fpath="tmp.ly",
                   title="Tmp", composer="Tmperstein", tagline="Copyright:?",
@@ -1071,10 +1072,16 @@ def plot_lilypond(upper_voices, lower_voices=None, own_staves=False,
             this_voice = "{}".format("voice{}".format(n))
             staff += '  \\new Voice = "{}"'.format(this_voice) + " {" + '\clef "' + use_clefs[n] + '" ' + this_staff + "}\n"
             if interval_figures is not None and len(interval_figures) > n:
+                assert interval_durations is not None
                 this_intervals = interval_figures[n]
+                this_durations = interval_durations[n]
+                # need to fix this
+                duration_map = {"4": "1",
+                                "2": "2",
+                                "1": "4"}
                 intervals_str = ""
-                for ti in this_intervals:
-                    intervals_str += "<" + str(ti) + "> "
+                for di, ti in zip(this_durations, this_intervals):
+                    intervals_str += "<" + str(ti) + ">{} ".format(duration_map[di])
                 intervals_str = intervals_str.strip()
                 staff += "  \\new FiguredBass \\figuremode { " + intervals_str + " }\n"
             # only the bottom staff...
@@ -1272,6 +1279,7 @@ def plot_pitches_and_durations(pitches, durations, extras=None,
                                key_signatures=None,
                                chord_annotations=None,
                                interval_figures=None,
+                               interval_durations=None,
                                use_clefs=None):
     # map midi pitches to lilypond ones... oy
     voices = pitches_and_durations_to_lilypond_notation(pitches, durations, extras, key_signatures=key_signatures)
@@ -1288,6 +1296,7 @@ def plot_pitches_and_durations(pitches, durations, extras=None,
                   key_signatures=key_signatures,
                   chord_annotations=chord_annotations,
                   interval_figures=interval_figures,
+                  interval_durations=interval_durations,
                   use_clefs=use_clefs)
 
 
@@ -2918,24 +2927,27 @@ if __name__ == "__main__":
         #chord_annotations = ["i", "I6", "IV", "V6", "I", "IV6", "I64", "V", "I"]
         """
         ex = fetch_species3()
-        notes = ex[2]["notes"]
-        durations = ex[2]["durations"]
+        notes = ex[-2]["notes"]
+        durations = ex[-2]["durations"]
         parts = notes_to_midi(notes)
         interval_figures = intervals_from_midi(parts, durations)
+        _, interval_durations = fixup_parts_durations(parts, durations)
+        interval_durations = [interval_durations[0]]
         # need to figure out duration convention (maybe support floats and str both?)
         durations = [[int(di) for di in d] for d in durations]
 
         # treble, bass, treble_8, etc
-        clefs = ["treble", "treble_8"]
+        clefs = ["treble", "treble"]
         time_signatures = [(4, 4), (4, 4)]
-
         pitches_and_durations_to_pretty_midi([parts], [durations],
                                              save_dir="samples",
                                              name_tag="sample_{}.mid",
                                              default_quarter_length=240,
                                              voice_params="piano")
 
-        # figure out plotting of tied notes, plotting of intervals...
+        # figure out plotting of tied notes
+        # fix zoom
         plot_pitches_and_durations(parts, durations,
                                    interval_figures=interval_figures,
+                                   interval_durations=interval_durations,
                                    use_clefs=clefs)
