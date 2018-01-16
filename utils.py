@@ -1726,6 +1726,9 @@ def estimate_mode(parts, durations, rules, key_signature):
     elif rules[-1][-1].split("->")[-1].split(":")[1] in ["P8", "P1"]:
         mode = midi_to_notes([[final_notes[-1, -1]]])[0][0][:-1] # strip octave
         return mode
+    elif rules[-1][0].split("->")[-1].split(":")[1] in ["RP1",]:
+        mode = midi_to_notes([[final_notes[-1, -1]]])[0][0][:-1] # strip octave
+        return mode
     else:
         print("Unknown mode estimate...")
         from IPython import embed; embed(); raise ValueError()
@@ -1946,7 +1949,25 @@ def bar_consonance_rule(parts, durations, key_signature, time_signature, mode, t
             if ti in harmonic_intervals or ti in neg_harmonic_intervals:
                 returns.append((True, "bar_consonance_rule: TRUE, harmonic interval {} allowed on downbeat".format(ti)))
             else:
-                returns.append((False, "bar_consonance_rule: FALSE, non-consonant interval {} disallowed on downbeat".format(ti)))
+                if idx < len(rules) - 1:
+                    nthis, nxt = rsp(rules[idx + 1])
+                    nm, ni, nn = nxt.split(":")
+                    if ni in harmonic_intervals or ni in neg_harmonic_intervals:
+                        if ni[0] == "-":
+                            raise ValueError("bar_consonance_rule, need to handle negative intervals")
+                        if int(ni[-1]) == 0 or int(ti[-1]) == 0:
+                            returns.append((False, "bar_consonance_rule: FALSE, suspension outside range"))
+                        else:
+                            if int(ti[-1]) - int(ni[-1]) == 1:
+                                returns.append((True, "bar_consonance_rule: TRUE, non-consonant interval {} resolves downward to {}".format(ti, ni)))
+                            elif int(ti[-1]) - int(ni[-1]) == -1:
+                                returns.append((True, "bar_consonance_rule: TRUE, non-consonant interval {} resolves upward to {}".format(ti, ni)))
+                            else:
+                                returns.append((False, "bar_consonance_rule: FALSE, non-consonant interval {} not resolved, goes to {}".format(ti, ni)))
+                    else:
+                        returns.append((False, "bar_consonance_rule: FALSE, non-consonant interval {} disallowed on downbeat".format(ti)))
+                else:
+                    returns.append((False, "bar_consonance_rule: FALSE, non-consonant interval {} disallowed on downbeat".format(ti)))
         elif timing_i != 0.:
             returns.append((None, "bar_consonance_rule: NONE, rule not applicable on beat {}".format(timing_i)))
         else:
@@ -2176,6 +2197,25 @@ def check_species3_rule(parts, durations, key_signature, time_signature, mode, t
             global_check = False
     return (global_check, res)
 
+species4_rules_map = OrderedDict()
+species4_rules_map["key_start_rule"] = key_start_rule
+species4_rules_map["bar_consonance_rule"] = bar_consonance_rule
+species4_rules_map["parallel_rule"] = parallel_rule
+species4_rules_map["beat_parallel_rule"] = beat_parallel_rule
+species4_rules_map["next_step_rule"] = next_step_rule
+species4_rules_map["sequence_step_rule"] = sequence_step_rule
+def check_species4_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+    res = [species4_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in species3_rules_map.keys()]
+
+    global_check = True
+    for r in res:
+        rr = [True if ri[0] is True or ri[0] is None else False for ri in r]
+        if all(rr):
+            pass
+        else:
+            global_check = False
+    return (global_check, res)
+
 
 
 def make_timings(durations, beats_per_measure, duration_unit):
@@ -2240,6 +2280,8 @@ def analyze_2voices(parts, durations, key_signature_str, time_signature_str, spe
         r = check_species2_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
     elif species == "species3":
         r = check_species3_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
+    elif species == "species4":
+        r = check_species4_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
     else:
         raise ValueError("Unknown species argument {}".format(species))
     all_ok = r[0]
@@ -2680,6 +2722,70 @@ def test_species3():
             print("Test FAIL for note sequence {}".format(fig_name))
         else:
             print("Test passed for note sequence {}".format(fig_name))
+
+
+def test_species4():
+    print("Running test for species4...")
+    all_ex = []
+    # fig 61
+    ex = {"notes": [["R", "C4", "A3", "D4", "B3", "E4"],
+                    ["C3", "F3", "D3", "G3", "E3"]],
+          "durations": [["2"] + ["4"] * 4 + ["2"], ["4"] * 5],
+          # First false due to mode estimation failure in partial sequences
+          # 2nd and 3rd falses both handle beat parallel issues in the example
+          # not really sure why beat parallel motion with only leaps <= a third were allowed
+          # because it is effectively 4 notes (2 movements)?
+          "answers": [False] + [True] * 3 + [False] + [True] * 3 + [False] + [True], # 10 total ???
+          "name": "fig61",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 62
+    ex = {"notes": [["R", "E4", "D4", "C4", "B3", "C4"],
+                    ["C3", "F3", "E3", "D3", "C3"]],
+          "durations": [["2"] + ["4"] * 3 + ["2"] +["4"], ["4"] * 5],
+          "answers": [True] * 9,
+          "name": "fig62",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    for ex in all_ex:
+        notes = ex["notes"]
+        durations = ex["durations"]
+        answers = ex["answers"]
+        fig_name = ex["name"]
+        ig = [ex["cantus_firmus_voice"],]
+        parts = notes_to_midi(notes)
+        key_signature = "C"
+        time_signature = "4/4"
+        aok = analyze_2voices(parts, durations, key_signature, time_signature,
+                              species="species4", cantus_firmus_voices=ig)
+        aok_lu = aok[1]
+        aok_rules = aok[2]
+
+        all_answers = [-1] * len(answers)
+
+        for a in aok[-1]:
+            if all_answers[a[0]] == -1:
+                all_answers[a[0]] = a[1]
+            else:
+                if a[1] in [None, True]:
+                    if all_answers[a[0]] == None:
+                        all_answers[a[0]] = True
+                    else:
+                        all_answers[a[0]] &= True
+                else:
+                    if all_answers[a[0]] == None:
+                        all_answers[a[0]] = False
+                    else:
+                        all_answers[a[0]] &= False
+        all_answers = [True if aa == None else aa for aa in all_answers]
+        assert len(all_answers) == len(answers)
+        equal = [aa == a for aa, a in zip(all_answers, answers)]
+        if not all(equal):
+            print("Test FAIL for note sequence {}".format(fig_name))
+        else:
+            print("Test passed for note sequence {}".format(fig_name))
     from IPython import embed; embed(); raise ValueError()
 
 
@@ -2694,7 +2800,8 @@ if __name__ == "__main__":
     if not print_it:
         #test_species1()
         #test_species2()
-        test_species3()
+        #test_species3()
+        test_species4()
     else:
         # fig 5, gradus ad parnassum
         notes = [["A3", "A3", "G3", "A3", "B3", "C4", "C4", "B3", "D4", "C#4", "D4"],
