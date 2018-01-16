@@ -694,7 +694,6 @@ def pitches_and_durations_to_pretty_midi(pitches, durations,
             pitches = [[[pitches[i][j, k] for j in range(pitches[i].shape[0])] for k in range(pitches[i].shape[1])] for i in range(len(pitches))]
             durations = [[[durations[i][j, k] for j in range(durations[i].shape[0])] for k in range(durations[i].shape[1])] for i in range(len(durations))]
 
-
     import pretty_midi
     # BTAS mapping
     def weird():
@@ -790,7 +789,7 @@ def pitches_and_durations_to_pretty_midi(pitches, durations,
             return pretty_midi.instrument_name_to_program(name)
 
         def mki(p):
-            return pretty_midi.Instrument(program=p)
+            return pretty_midi.Instrument(program=p, name=str(p))
 
         pm_programs = [mkpm(n) for n in voice_mappings]
         pm_instruments = [mki(p) for p in pm_programs]
@@ -807,10 +806,10 @@ def pitches_and_durations_to_pretty_midi(pitches, durations,
         pitches_ss = pitches_ss[::-1]
         durations_ss = durations_ss[::-1]
 
-        # time
-        for ii in range(len(durations_ss[0])):
-            # voice
-            for jj in range(order):
+        # voice
+        for jj in range(order):
+            # time / steps
+            for ii in range(len(durations_ss[jj])):
                 try:
                     pitches_isj = pitches_ss[jj][ii]
                     durations_isj = durations_ss[jj][ii]
@@ -2325,8 +2324,7 @@ def analyze_2voices(parts, durations, key_signature_str, time_signature_str, spe
     return (all_ok, true_false, rules, sorted(this_ok))
 
 
-def test_species1():
-    print("Running test for species1...")
+def fetch_species1():
     all_ex = []
 
     # All figure numbers from Gradus ad Parnassum
@@ -2437,6 +2435,12 @@ def test_species1():
           "name": "fig23",
           "cantus_firmus_voice": 0}
     all_ex.append(ex)
+    return all_ex
+
+
+def test_species1():
+    print("Running test for species1...")
+    all_ex = fetch_species1()
 
     for ex in all_ex:
         notes = ex["notes"]
@@ -2476,16 +2480,13 @@ def test_species1():
         assert len(all_answers) == len(answers)
         equal = [aa == a for aa, a in zip(all_answers, answers)]
         if not all(equal):
-            from IPython import embed; embed(); raise ValueError()
             print("Test FAIL for note sequence {}".format(fig_name))
         else:
             print("Test passed for note sequence {}".format(fig_name))
 
 
-def test_species2():
-    print("Running test for species2...")
+def fetch_species2():
     all_ex = []
-
     # fig 26
     ex = {"notes": [["A3", "D4", "A3", "B3", "C4", "G3", "A3", "D4", "B3", "G3", "A3", "B3", "C4", "A3", "D4", "B3", "C4", "A3", "B3", "C#4", "D4"],
                     ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]],
@@ -2602,6 +2603,12 @@ def test_species2():
           "name": "fig45",
           "cantus_firmus_voice": 0}
     all_ex.append(ex)
+    return all_ex
+
+
+def test_species2():
+    print("Running test for species2...")
+    all_ex = fetch_species2()
 
     for ex in all_ex:
         notes = ex["notes"]
@@ -2640,9 +2647,7 @@ def test_species2():
         else:
             print("Test passed for note sequence {}".format(fig_name))
 
-
-def test_species3():
-    print("Running test for species3...")
+def fetch_species3():
     all_ex = []
 
     # fig 55
@@ -2708,6 +2713,12 @@ def test_species3():
           "name": "fig60",
           "cantus_firmus_voice": 1}
     all_ex.append(ex)
+    return all_ex
+
+
+def test_species3():
+    print("Running test for species3...")
+    all_ex = fetch_species3()
 
     for ex in all_ex:
         notes = ex["notes"]
@@ -2750,6 +2761,48 @@ def test_species3():
 
 def test_species4():
     print("Running test for species4...")
+    all_ex = fetch_species4()
+
+    for ex in all_ex:
+        notes = ex["notes"]
+        durations = ex["durations"]
+        answers = ex["answers"]
+        fig_name = ex["name"]
+        ig = [ex["cantus_firmus_voice"],]
+        parts = notes_to_midi(notes)
+        key_signature = "C"
+        time_signature = "4/4"
+        aok = analyze_2voices(parts, durations, key_signature, time_signature,
+                              species="species4", cantus_firmus_voices=ig)
+        aok_lu = aok[1]
+        aok_rules = aok[2]
+
+        all_answers = [-1] * len(answers)
+
+        for a in aok[-1]:
+            if all_answers[a[0]] == -1:
+                all_answers[a[0]] = a[1]
+            else:
+                if a[1] in [None, True]:
+                    if all_answers[a[0]] == None:
+                        all_answers[a[0]] = True
+                    else:
+                        all_answers[a[0]] &= True
+                else:
+                    if all_answers[a[0]] == None:
+                        all_answers[a[0]] = False
+                    else:
+                        all_answers[a[0]] &= False
+        all_answers = [True if aa == None else aa for aa in all_answers]
+        assert len(all_answers) == len(answers)
+        equal = [aa == a for aa, a in zip(all_answers, answers)]
+        if not all(equal):
+            print("Test FAIL for note sequence {}".format(fig_name))
+        else:
+            print("Test passed for note sequence {}".format(fig_name))
+
+
+def fetch_species4():
     all_ex = []
     # fig 61
     ex = {"notes": [["R", "C4", "A3", "D4", "B3", "E4"],
@@ -2839,45 +2892,8 @@ def test_species4():
           "name": "fig78",
           "cantus_firmus_voice": 0}
     all_ex.append(ex)
+    return all_ex
 
-
-    for ex in all_ex:
-        notes = ex["notes"]
-        durations = ex["durations"]
-        answers = ex["answers"]
-        fig_name = ex["name"]
-        ig = [ex["cantus_firmus_voice"],]
-        parts = notes_to_midi(notes)
-        key_signature = "C"
-        time_signature = "4/4"
-        aok = analyze_2voices(parts, durations, key_signature, time_signature,
-                              species="species4", cantus_firmus_voices=ig)
-        aok_lu = aok[1]
-        aok_rules = aok[2]
-
-        all_answers = [-1] * len(answers)
-
-        for a in aok[-1]:
-            if all_answers[a[0]] == -1:
-                all_answers[a[0]] = a[1]
-            else:
-                if a[1] in [None, True]:
-                    if all_answers[a[0]] == None:
-                        all_answers[a[0]] = True
-                    else:
-                        all_answers[a[0]] &= True
-                else:
-                    if all_answers[a[0]] == None:
-                        all_answers[a[0]] = False
-                    else:
-                        all_answers[a[0]] &= False
-        all_answers = [True if aa == None else aa for aa in all_answers]
-        assert len(all_answers) == len(answers)
-        equal = [aa == a for aa, a in zip(all_answers, answers)]
-        if not all(equal):
-            print("Test FAIL for note sequence {}".format(fig_name))
-        else:
-            print("Test passed for note sequence {}".format(fig_name))
 
 
 if __name__ == "__main__":
@@ -2893,21 +2909,33 @@ if __name__ == "__main__":
         test_species3()
         test_species4()
     else:
+        """
         # fig 5, gradus ad parnassum
         notes = [["A3", "A3", "G3", "A3", "B3", "C4", "C4", "B3", "D4", "C#4", "D4"],
                  ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]]
-        clefs = ["treble", "treble"]
-        parts = notes_to_midi(notes)
-        interval_figures = intervals_from_midi(parts, durations)
         durations = [[4.] * len(notes[0]), [4.] * len(notes[1])]
         # can add harmonic nnotations as well to plot
         #chord_annotations = ["i", "I6", "IV", "V6", "I", "IV6", "I64", "V", "I"]
+        """
+        ex = fetch_species3()
+        notes = ex[2]["notes"]
+        durations = ex[2]["durations"]
+        parts = notes_to_midi(notes)
+        interval_figures = intervals_from_midi(parts, durations)
+        # need to figure out duration convention (maybe support floats and str both?)
+        durations = [[int(di) for di in d] for d in durations]
+
+        # treble, bass, treble_8, etc
+        clefs = ["treble", "treble_8"]
         time_signatures = [(4, 4), (4, 4)]
+
         pitches_and_durations_to_pretty_midi([parts], [durations],
                                              save_dir="samples",
                                              name_tag="sample_{}.mid",
                                              default_quarter_length=240,
                                              voice_params="piano")
+
+        # figure out plotting of tied notes, plotting of intervals...
         plot_pitches_and_durations(parts, durations,
                                    interval_figures=interval_figures,
                                    use_clefs=clefs)
