@@ -1921,7 +1921,17 @@ def beat_parallel_rule(parts, durations, key_signature, time_signature, mode, ti
             if pi in ["P8", "P5"] and pi == ti:
                 # check beats - use the 0th voice?
                 if 0. == timings[0][idx] and 0. == timings[0][idx - 2] and abs(inverse_intervals_map[li]) < 5:
-                    returns.append((False, "beat_parallel_rule: FALSE, previous downbeat had parallel perfect interval {}".format(pi)))
+                    if pi == "P5":
+                        common_notes = {}
+                        for _n in pn.split(",") + ln.split(",") + tn.split(","):
+                            common_notes[_n] = True
+                        # 4 common notes over 3 events with 2 voices means it is syncopated
+                        if len(common_notes) == 4:
+                            returns.append((True, "beat_parallel_rule: TRUE, parallel perfect interval {} allowed in syncopation".format(pi)))
+                        else:
+                            returns.append((False, "beat_parallel_rule: FALSE, parallel perfect interval {} not allowed in syncopation".format(pi)))
+                    else:
+                        returns.append((False, "beat_parallel_rule: FALSE, previous downbeat had parallel perfect interval {}".format(pi)))
                     continue
             returns.append((True, "beat_parallel_rule: TRUE, no beat parallel move"))
         else:
@@ -1953,10 +1963,24 @@ def bar_consonance_rule(parts, durations, key_signature, time_signature, mode, t
                     nthis, nxt = rsp(rules[idx + 1])
                     nm, ni, nn = nxt.split(":")
                     if ni in harmonic_intervals or ni in neg_harmonic_intervals:
-                        if ni[0] == "-":
-                            raise ValueError("bar_consonance_rule, need to handle negative intervals")
                         if int(ni[-1]) == 0 or int(ti[-1]) == 0:
                             returns.append((False, "bar_consonance_rule: FALSE, suspension outside range"))
+                        elif ti[0] == "-" or ni[0] == "-":
+                            # remap negative to positive equivalent, then check
+                            remap = {"-m7": "M2",
+                                     "-M7": "m2"}
+                            old_ti = ti
+                            old_ni = ni
+                            if ti[0] == "-":
+                                ti = remap[ti]
+                            if ni[0] == "-":
+                                ni = remap[ni]
+                            if int(ti[-1]) - int(ni[-1]) == 1:
+                                returns.append((True, "bar_consonance_rule: TRUE, negative non-consonant interval {} resolves downward to {}".format(old_ti, old_ni)))
+                            elif int(ti[-1]) - int(ni[-1]) == -1:
+                                returns.append((True, "bar_consonance_rule: TRUE, negative non-consonant interval {} resolves upward to {}".format(old_ti, old_ni)))
+                            else:
+                                returns.append((False, "bar_consonance_rule: FALSE, negative non-consonant interval {} not resolved, goes to {}".format(old_ti, old_ni)))
                         else:
                             if int(ti[-1]) - int(ni[-1]) == 1:
                                 returns.append((True, "bar_consonance_rule: TRUE, non-consonant interval {} resolves downward to {}".format(ti, ni)))
@@ -2732,10 +2756,7 @@ def test_species4():
                     ["C3", "F3", "D3", "G3", "E3"]],
           "durations": [["2"] + ["4"] * 4 + ["2"], ["4"] * 5],
           # First false due to mode estimation failure in partial sequences
-          # 2nd and 3rd falses both handle beat parallel issues in the example
-          # not really sure why beat parallel motion with only leaps <= a third were allowed
-          # because it is effectively 4 notes (2 movements)?
-          "answers": [False] + [True] * 3 + [False] + [True] * 3 + [False] + [True], # 10 total ???
+          "answers": [False] + [True] * 9, # 10 total ???
           "name": "fig61",
           "cantus_firmus_voice": 1}
     all_ex.append(ex)
@@ -2748,6 +2769,77 @@ def test_species4():
           "name": "fig62",
           "cantus_firmus_voice": 1}
     all_ex.append(ex)
+
+    # fig 63
+    ex = {"notes": [["R", "G3", "F3", "E3", "D3"],
+                    ["E3", "D3", "C3", "B2"]],
+          "durations": [["2"] + ["4"] * 3 + ["2"], ["4"] * 4],
+          # Handle mode estimation error for partial sequence
+          "answers": [False] + [True] * 7,
+          "name": "fig63",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 73
+    ex = {"notes": [["R", "A3", "D4", "C4", "Bb3", "G3", "A3", "C4", "F4", "E4", "D4", "C#4", "D4"],
+                    ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]],
+          "durations": [["2"] + ["4"] * 4 + ["2"] * 2 + ["4"] * 4 + ["2"] + ["4"],
+                        ["4"] * 11],
+          "answers": [True] * 21,
+          "name": "fig73",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 74
+    ex = {"notes": [["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"],
+                    ["R", "D2", "D3", "C3", "B2", "E3", "D3", "F3", "E3", "D3", "C#3", "D3"]],
+          "durations": [["4"] * 11,
+                        ["2"] + ["4"] * 9 + ["2"] + ["4"]],
+          "answers": [True] * 21,
+          "name": "fig74",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 75
+    ex = {"notes": [["R", "E4", "C4", "B3", "C4", "E3", "F3", "C4", "B3", "E4", "D4", "E4"],
+                    ["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"]],
+          "durations": [["2"] + ["4"] * 2 + ["2"] * 2 + ["4"] * 5 + ["2"] + ["4"],
+                        ["4"] * 10],
+          "answers": [True] * 19,
+          "name": "fig75",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 76
+    ex = {"notes": [["E3", "C3", "D3", "C3", "A2", "A3", "G3", "E3", "F3", "E3"],
+                    ["R", "E2", "A2", "G2", "F2", "D2", "D3", "C3", "E3", "D3", "E3"]],
+          "durations": [["4"] * 10,
+                        ["2"] + ["4"] * 8 + ["2"] + ["4"]],
+          "answers": [True] * 19,
+          "name": "fig76",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
+
+    # fig 77
+    ex = {"notes": [["R", "F3", "E3", "C3", "F3", "A3", "G3", "F3", "E3", "A3", "F3", "E3", "F3"],
+                    ["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"]],
+          "durations": [["2"] + ["4"] * 10 + ["2"] + ["4"],
+                        ["4"] * 12],
+          "answers": [True] * 23,
+          "name": "fig77",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+
+    # fig 78
+    ex = {"notes": [["F2", "G2", "A2", "F2", "D2", "E2", "F2", "C3", "A2", "F2", "G2", "F2"],
+                    ["R", "F2", "E2", "D2", "Bb1", "G1", "G2", "F2", "E2", "D2", "F2", "E2", "F2"]],
+          "durations": [["4"] * 12,
+                        ["2"] + ["4"] * 10 + ["2"] + ["4"]],
+          "answers": [True] * 23,
+          "name": "fig78",
+          "cantus_firmus_voice": 0}
+    all_ex.append(ex)
+
 
     for ex in all_ex:
         notes = ex["notes"]
@@ -2786,8 +2878,6 @@ def test_species4():
             print("Test FAIL for note sequence {}".format(fig_name))
         else:
             print("Test passed for note sequence {}".format(fig_name))
-    from IPython import embed; embed(); raise ValueError()
-
 
 
 if __name__ == "__main__":
@@ -2798,9 +2888,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print_it = args.p
     if not print_it:
-        #test_species1()
-        #test_species2()
-        #test_species3()
+        test_species1()
+        test_species2()
+        test_species3()
         test_species4()
     else:
         # fig 5, gradus ad parnassum
