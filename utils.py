@@ -2929,6 +2929,7 @@ if __name__ == "__main__":
         ex = fetch_species3()
         notes = ex[-2]["notes"]
         durations = ex[-2]["durations"]
+        # can we do all these automatically?
         parts = notes_to_midi(notes)
         interval_figures = intervals_from_midi(parts, durations)
         _, interval_durations = fixup_parts_durations(parts, durations)
@@ -2937,7 +2938,7 @@ if __name__ == "__main__":
         durations = [[int(di) for di in d] for d in durations]
 
         # treble, bass, treble_8, etc
-        clefs = ["treble", "treble"]
+        clefs = ["treble", "treble_8"]
         time_signatures = [(4, 4), (4, 4)]
         pitches_and_durations_to_pretty_midi([parts], [durations],
                                              save_dir="samples",
