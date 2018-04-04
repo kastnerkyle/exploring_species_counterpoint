@@ -1,4 +1,80 @@
 # -*- coding: utf-8 -*-
+from music21 import converter, roman, key
+
+
+def music21_extract(p):
+    """
+    Takes in a Music21 score, and outputs dict
+    """
+    parts = []
+    parts_times = []
+    parts_delta_times = []
+    parts_extras = []
+    parts_time_signatures = []
+    parts_key_signatures = []
+    c = p.chordify()
+    ks = p.parts[0].stream().flat.keySignature
+    parts_roman_chords = []
+    parts_chords = []
+    for this_chord in c.recurse().getElementsByClass('Chord'):
+        parts_chords.append(this_chord.fullName)
+        #print(this_chord.measureNumber, this_chord.beatStr, this_chord)
+        rn = roman.romanNumeralFromChord(this_chord, ks.asKey())
+        parts_roman_chords.append(rn.figure)
+
+    for i, pi in enumerate(p.parts):
+        part = []
+        part_time = []
+        part_delta_time = []
+        part_extras = []
+        total_time = 0
+        ts = pi.stream().flat.timeSignature
+        ks = pi.stream().flat.keySignature
+        if len(ks.alteredPitches) == 0:
+            parts_key_signatures.append([0])
+        else:
+            parts_key_signatures.append([ks.sharps])
+        parts_time_signatures.append((ts.numerator, ts.denominator))
+        for n in pi.stream().flat.notesAndRests:
+            if n.isRest:
+                part.append(0)
+            else:
+                try:
+                    part.append(n.midi)
+                except AttributeError:
+                    continue
+            if n.tie is not None:
+                if n.tie.type == "start":
+                    part_extras.append(1)
+                elif n.tie.type == "continue":
+                    part_extras.append(2)
+                elif n.tie.type == "stop":
+                    part_extras.append(3)
+                else:
+                   print("another type of tie?")
+                   from IPython import embed; embed(); raise ValueError()
+            elif len(n.expressions) > 0:
+                print("trill or fermata?")
+                from IPython import embed; embed(); raise ValueError()
+            else:
+                part_extras.append(0)
+
+            part_time.append(total_time + n.duration.quarterLength)
+            total_time = part_time[-1]
+            part_delta_time.append(n.duration.quarterLength)
+        parts.append(part)
+        parts_times.append(part_time)
+        parts_delta_times.append(part_delta_time)
+        parts_extras.append(part_extras)
+    return {"parts": parts,
+            "parts_times": parts_times,
+            "parts_delta_times": parts_delta_times,
+            "parts_extras": parts_extras,
+            "parts_time_signatures": parts_time_signatures,
+            "parts_key_signatures": parts_key_signatures,
+            "parts_chords": parts_chords,
+            "parts_roman_chords": parts_roman_chords}
+
 
 def fetch_two_voice_species1():
     all_ex = []
