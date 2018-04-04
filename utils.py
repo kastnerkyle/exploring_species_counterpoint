@@ -2248,8 +2248,6 @@ def check_species4_rule(parts, durations, key_signature, time_signature, mode, t
             global_check = False
     return (global_check, res)
 
-
-
 def make_timings(durations, beats_per_measure, duration_unit):
     # use normalized_durations?
     if beats_per_measure != 4:
@@ -2290,8 +2288,8 @@ def estimate_timing(parts, durations, time_signature):
     return ud
 
 
-def analyze_2voices(parts, durations, key_signature_str, time_signature_str, species="species1",
-                    cantus_firmus_voices=None):
+def analyze_two_voices(parts, durations, key_signature_str, time_signature_str, species="species1",
+                       cantus_firmus_voices=None):
     # not ideal but keeps stuff consistent
     key_signature = key_signature_map[key_signature_str]
     # just check that it parses here
@@ -2333,7 +2331,7 @@ def analyze_2voices(parts, durations, key_signature_str, time_signature_str, spe
     return (all_ok, true_false, rules, sorted(this_ok))
 
 
-def fetch_species1():
+def fetch_two_voice_species1():
     all_ex = []
 
     # All figure numbers from Gradus ad Parnassum
@@ -2447,9 +2445,9 @@ def fetch_species1():
     return all_ex
 
 
-def test_species1():
+def test_two_voice_species1():
     print("Running test for species1...")
-    all_ex = fetch_species1()
+    all_ex = fetch_two_voice_species1()
 
     for ex in all_ex:
         notes = ex["notes"]
@@ -2466,8 +2464,8 @@ def test_species1():
         # also any of these can be dotted (".") e.g. ".8th" (dotted eighth)
         # or summed for a tie "1+8th"
         # TODO: Triplets?
-        aok = analyze_2voices(parts, durations, key_signature, time_signature,
-                              species="species1", cantus_firmus_voices=ig)
+        aok = analyze_two_voices(parts, durations, key_signature, time_signature,
+                                 species="species1", cantus_firmus_voices=ig)
         aok_lu = aok[1]
         aok_rules = aok[2]
 
@@ -2494,7 +2492,7 @@ def test_species1():
             print("Test passed for note sequence {}".format(fig_name))
 
 
-def fetch_species2():
+def fetch_two_voice_species2():
     all_ex = []
     # fig 26
     ex = {"notes": [["A3", "D4", "A3", "B3", "C4", "G3", "A3", "D4", "B3", "G3", "A3", "B3", "C4", "A3", "D4", "B3", "C4", "A3", "B3", "C#4", "D4"],
@@ -2615,9 +2613,9 @@ def fetch_species2():
     return all_ex
 
 
-def test_species2():
+def test_two_voice_species2():
     print("Running test for species2...")
-    all_ex = fetch_species2()
+    all_ex = fetch_two_voice_species2()
 
     for ex in all_ex:
         notes = ex["notes"]
@@ -2628,8 +2626,8 @@ def test_species2():
         parts = notes_to_midi(notes)
         key_signature = "C"
         time_signature = "4/4"
-        aok = analyze_2voices(parts, durations, key_signature, time_signature,
-                              species="species2", cantus_firmus_voices=ig)
+        aok = analyze_two_voices(parts, durations, key_signature, time_signature,
+                                 species="species2", cantus_firmus_voices=ig)
         aok_lu = aok[1]
         aok_rules = aok[2]
 
@@ -2656,7 +2654,7 @@ def test_species2():
         else:
             print("Test passed for note sequence {}".format(fig_name))
 
-def fetch_species3():
+def fetch_two_voice_species3():
     all_ex = []
 
     # fig 55
@@ -2725,9 +2723,9 @@ def fetch_species3():
     return all_ex
 
 
-def test_species3():
+def test_two_voice_species3():
     print("Running test for species3...")
-    all_ex = fetch_species3()
+    all_ex = fetch_two_voice_species3()
 
     for ex in all_ex:
         notes = ex["notes"]
@@ -2738,8 +2736,8 @@ def test_species3():
         parts = notes_to_midi(notes)
         key_signature = "C"
         time_signature = "4/4"
-        aok = analyze_2voices(parts, durations, key_signature, time_signature,
-                              species="species3", cantus_firmus_voices=ig)
+        aok = analyze_two_voices(parts, durations, key_signature, time_signature,
+                                 species="species3", cantus_firmus_voices=ig)
         aok_lu = aok[1]
         aok_rules = aok[2]
 
@@ -2768,9 +2766,9 @@ def test_species3():
             print("Test passed for note sequence {}".format(fig_name))
 
 
-def test_species4():
+def test_two_voice_species4():
     print("Running test for species4...")
-    all_ex = fetch_species4()
+    all_ex = fetch_two_voice_species4()
 
     for ex in all_ex:
         notes = ex["notes"]
@@ -2781,8 +2779,8 @@ def test_species4():
         parts = notes_to_midi(notes)
         key_signature = "C"
         time_signature = "4/4"
-        aok = analyze_2voices(parts, durations, key_signature, time_signature,
-                              species="species4", cantus_firmus_voices=ig)
+        aok = analyze_two_voices(parts, durations, key_signature, time_signature,
+                                 species="species4", cantus_firmus_voices=ig)
         aok_lu = aok[1]
         aok_rules = aok[2]
 
@@ -2811,7 +2809,7 @@ def test_species4():
             print("Test passed for note sequence {}".format(fig_name))
 
 
-def fetch_species4():
+def fetch_two_voice_species4():
     all_ex = []
     # fig 61
     ex = {"notes": [["R", "C4", "A3", "D4", "B3", "E4"],
@@ -2904,6 +2902,62 @@ def fetch_species4():
     return all_ex
 
 
+def test_three_voice_species1():
+    print("Running test for three voice species1...")
+    all_ex = fetch_three_voice_species1()
+
+    for ex in all_ex:
+        notes = ex["notes"]
+        durations = ex["durations"]
+        answers = ex["answers"]
+        fig_name = ex["name"]
+        ig = [ex["cantus_firmus_voice"],]
+        parts = notes_to_midi(notes)
+        key_signature = "C"
+        time_signature = "4/4"
+        aok = analyze_two_voices(parts, durations, key_signature, time_signature,
+                                 species="species4", cantus_firmus_voices=ig)
+        aok_lu = aok[1]
+        aok_rules = aok[2]
+
+        all_answers = [-1] * len(answers)
+
+        for a in aok[-1]:
+            if all_answers[a[0]] == -1:
+                all_answers[a[0]] = a[1]
+            else:
+                if a[1] in [None, True]:
+                    if all_answers[a[0]] == None:
+                        all_answers[a[0]] = True
+                    else:
+                        all_answers[a[0]] &= True
+                else:
+                    if all_answers[a[0]] == None:
+                        all_answers[a[0]] = False
+                    else:
+                        all_answers[a[0]] &= False
+        all_answers = [True if aa == None else aa for aa in all_answers]
+        assert len(all_answers) == len(answers)
+        equal = [aa == a for aa, a in zip(all_answers, answers)]
+        if not all(equal):
+            print("Test FAIL for note sequence {}".format(fig_name))
+        else:
+            print("Test passed for note sequence {}".format(fig_name))
+
+
+def fetch_three_voice_species1():
+    all_ex = []
+    # fig 61
+    ex = {"notes": [["R", "C4", "A3", "D4", "B3", "E4"],
+                    ["C3", "F3", "D3", "G3", "E3"]],
+          "durations": [["2"] + ["4"] * 4 + ["2"], ["4"] * 5],
+          # First false due to mode estimation failure in partial sequences
+          "answers": [False] + [True] * 9, # 10 total ???
+          "name": "fig61",
+          "cantus_firmus_voice": 1}
+    all_ex.append(ex)
+    return all_ex
+
 
 if __name__ == "__main__":
     import argparse
@@ -2913,10 +2967,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print_it = args.p
     if not print_it:
-        test_species1()
-        test_species2()
-        test_species3()
-        test_species4()
+        test_two_voice_species1()
+        test_two_voice_species2()
+        test_two_voice_species3()
+        test_two_voice_species4()
+        #test_three_voice_species1()
     else:
         """
         # fig 5, gradus ad parnassum
@@ -2926,7 +2981,7 @@ if __name__ == "__main__":
         # can add harmonic nnotations as well to plot
         #chord_annotations = ["i", "I6", "IV", "V6", "I", "IV6", "I64", "V", "I"]
         """
-        ex = fetch_species3()
+        ex = fetch_two_voice_species3()
         notes = ex[-2]["notes"]
         durations = ex[-2]["durations"]
         # can we do all these automatically?
