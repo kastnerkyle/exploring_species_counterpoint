@@ -9,12 +9,6 @@ import numpy as np
 import fractions
 import itertools
 
-from exercises import fetch_two_voice_species1
-from exercises import fetch_two_voice_species2
-from exercises import fetch_two_voice_species3
-from exercises import fetch_two_voice_species4
-
-
 def notes_to_midi(notes):
     # r is rest
     # takes in list of list
@@ -1282,6 +1276,11 @@ def test_three_voice_species1():
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Demo of utils")
+
+    from datasets import fetch_two_voice_species1
+    from datasets import fetch_two_voice_species2
+    from datasets import fetch_two_voice_species3
+    from datasets import fetch_two_voice_species4
 
     parser.add_argument('-p', action="store_true", default=False)
     args = parser.parse_args()

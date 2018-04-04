@@ -1239,7 +1239,7 @@ if __name__ == "__main__":
     from analysis import notes_to_midi
     from analysis import fixup_parts_durations
     from analysis import intervals_from_midi
-    from exercises import fetch_two_voice_species3
+    from datasets import fetch_two_voice_species3
 
     ex = fetch_two_voice_species3()
     nd = ex[-2]["notes_and_durations"]
