@@ -310,8 +310,8 @@ def fetch_two_voice_species4():
     ex = {"notes": [["R", "C4", "A3", "D4", "B3", "E4"],
                     ["C3", "F3", "D3", "G3", "E3"]],
           "durations": [["2"] + ["4"] * 4 + ["2"], ["4"] * 5],
+          "answers": [False] + [True] * 9,
           # First false due to mode estimation failure in partial sequences
-          "answers": [False] + [True] * 9, # 10 total ???
           "name": "fig61",
           "cantus_firmus_voice": 1}
     all_ex.append(ex)
@@ -329,8 +329,8 @@ def fetch_two_voice_species4():
     ex = {"notes": [["R", "G3", "F3", "E3", "D3"],
                     ["E3", "D3", "C3", "B2"]],
           "durations": [["2"] + ["4"] * 3 + ["2"], ["4"] * 4],
-          # Handle mode estimation error for partial sequence
           "answers": [False] + [True] * 7,
+          # Handle mode estimation error for partial sequence
           "name": "fig63",
           "cantus_firmus_voice": 1}
     all_ex.append(ex)
