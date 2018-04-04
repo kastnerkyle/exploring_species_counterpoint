@@ -1,9 +1,9 @@
 import os
 
-with open("exercises.py", 'rb') as f:
+with open("old_exercises.py", 'rb') as f:
     lines = f.readlines()
 
-with open("new_exercises.py", 'wb') as f:
+with open("rewrite_exercises.py", 'wb') as f:
     line_counter = 0
     while line_counter < len(lines):
         l = lines[line_counter]
