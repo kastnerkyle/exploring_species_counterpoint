@@ -2342,8 +2342,8 @@ def test_two_voice_species1():
 
     for ex in all_ex:
         nd = ex["notes_and_durations"]
-        notes = [ndi[0] for ndi in nd]
-        durations = [ndi[1] for ndi in nd]
+        notes = [[ndii[0] for ndii in ndi] for ndi in nd]
+        durations = [[ndii[1] for ndii in ndi] for ndi in nd]
         #notes = ex["notes"]
         #durations = ex["durations"]
         answers = ex["answers"]
@@ -2392,8 +2392,8 @@ def test_two_voice_species2():
 
     for ex in all_ex:
         nd = ex["notes_and_durations"]
-        notes = [ndi[0] for ndi in nd]
-        durations = [ndi[1] for ndi in nd]
+        notes = [[ndii[0] for ndii in ndi] for ndi in nd]
+        durations = [[ndii[1] for ndii in ndi] for ndi in nd]
         #notes = ex["notes"]
         #durations = ex["durations"]
         answers = ex["answers"]
@@ -2437,8 +2437,8 @@ def test_two_voice_species3():
 
     for ex in all_ex:
         nd = ex["notes_and_durations"]
-        notes = [ndi[0] for ndi in nd]
-        durations = [ndi[1] for ndi in nd]
+        notes = [[ndii[0] for ndii in ndi] for ndi in nd]
+        durations = [[ndii[1] for ndii in ndi] for ndi in nd]
         #notes = ex["notes"]
         #durations = ex["durations"]
         answers = ex["answers"]
@@ -2483,8 +2483,8 @@ def test_two_voice_species4():
 
     for ex in all_ex:
         nd = ex["notes_and_durations"]
-        notes = [ndi[0] for ndi in nd]
-        durations = [ndi[1] for ndi in nd]
+        notes = [[ndii[0] for ndii in ndi] for ndi in nd]
+        durations = [[ndii[1] for ndii in ndi] for ndi in nd]
         #notes = ex["notes"]
         #durations = ex["durations"]
         answers = ex["answers"]
@@ -2529,8 +2529,8 @@ def test_three_voice_species1():
 
     for ex in all_ex:
         nd = ex["notes_and_durations"]
-        notes = [ndi[0] for ndi in nd]
-        durations = [ndi[1] for ndi in nd]
+        notes = [[ndii[0] for ndii in ndi] for ndi in nd]
+        durations = [[ndii[1] for ndii in ndi] for ndi in nd]
         #notes = ex["notes"]
         #durations = ex["durations"]
         answers = ex["answers"]
