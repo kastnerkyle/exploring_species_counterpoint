@@ -140,11 +140,8 @@ def fixup_parts_durations(parts, durations):
 def intervals_from_midi(parts, durations):
     if len(parts) < 2:
         raise ValueError("Must be at least 2 parts to compare intervals")
-    if len(parts) > 2:
+    if len(parts) > 3:
         raise ValueError("NYI")
-
-    intervals = []
-    this_intervals = []
 
     parts, durations = fixup_parts_durations(parts, durations)
 
@@ -152,69 +149,90 @@ def intervals_from_midi(parts, durations):
     for p, d in zip(parts, durations):
         assert len(p) == len(d)
 
-    proposed = np.array(parts[0]) - np.array(parts[1])
-    for idx, p in enumerate(proposed):
-        try:
-            this_intervals.append(intervals_map[p])
-        except:
-            assert len(parts) == 2
-            if parts[0][idx] == 0:
-                # rest in part 0
-                #print("Possible rest in part0")
-                this_intervals.append("R" + intervals_map[0])
+    if len(parts) == 2:
+        pairs = [(0, 1)]
+    elif len(parts) == 3:
+        # for 3 voices, follow the style of Fux (assume the 3 are STB)
+        # soprano and bass
+        # tenor and bass
+        # soprano and tenor
+        pairs = [(0, 2), (1, 2), (0, 1)]
+    else:
+        raise ValueError("Shouldn't get here, intervals_from_midi")
 
-            if parts[1][idx] == 0:
-                # rest in part 1
-                #print("Possible rest in part1")
-                this_intervals.append("R" + intervals_map[0])
-        """
-        # strip off name
-        if full_name:
-            this_intervals.append(intervals_map[p])
-        else:
-            nm = intervals_map[p]
-            if "-" not in nm:
-                this_intervals.append(nm[1:])
-            else:
-                this_intervals.append(nm[2:])
-        """
-    intervals.append(this_intervals)
+    intervals = []
+    for pair in pairs:
+        this_intervals = []
+        proposed = np.array(parts[pair[0]]) - np.array(parts[pair[1]])
+        for idx, p in enumerate(proposed):
+            try:
+                this_intervals.append(intervals_map[p])
+            except:
+                if len(parts) != 2:
+                    raise ValueError("Intervals from midi, 3 voice - needs fix!")
+                if parts[0][idx] == 0:
+                    # rest in part 0
+                    #print("Possible rest in part0")
+                    this_intervals.append("R" + intervals_map[0])
+
+                if parts[1][idx] == 0:
+                    # rest in part 1
+                    #print("Possible rest in part1")
+                    this_intervals.append("R" + intervals_map[0])
+        intervals.append(this_intervals)
     return intervals
 
 
 def motion_from_midi(parts, durations):
-    if len(parts) != 2:
+    if len(parts) < 2:
+        raise ValueError("Need at least 2 voices to get motion")
+    if len(parts) > 3:
         raise ValueError("NYI")
 
     parts, durations = fixup_parts_durations(parts, durations)
 
-    # similar, oblique, contrary, direct
-    p0 = np.array(parts[0])
-    p1 = np.array(parts[1])
-    dp0 = p0[1:] - p0[:-1]
-    dp1 = p1[1:] - p1[:-1]
-    # first motion is always start...
-    motions = ["START"]
-    for dip0, dip1 in zip(dp0, dp1):
-        if dip0 == 0 or dip1 == 0:
-            motions.append("OBLIQUE")
-        elif dip0 == dip1:
-            motions.append("DIRECT")
-        elif dip0 > 0 and dip1 < 0:
-            motions.append("CONTRARY")
-        elif dip0 < 0 and dip1 > 0:
-            motions.append("CONTRARY")
-        elif dip0 < 0 and dip1 < 0:
-            motions.append("SIMILAR")
-        elif dip0 > 0 and dip1 > 0:
-            motions.append("SIMILAR")
-        else:
-            raise ValueError("Should never see this case!")
-    motions.append("END")
-    return [motions]
+
+    if len(parts) == 2:
+        pairs = [(0, 1)]
+    elif len(parts) == 3:
+        # for 3 voices, follow the style of Fux (assume the 3 are STB)
+        # soprano and bass
+        # tenor and bass
+        # soprano and tenor
+        pairs = [(0, 2), (1, 2), (0, 1)]
+    else:
+        raise ValueError("Shouldn't get here, intervals_from_midi")
+
+    motions = []
+    for pair in pairs:
+        # similar, oblique, contrary, direct
+        p0 = np.array(parts[pair[0]])
+        p1 = np.array(parts[pair[1]])
+        dp0 = p0[1:] - p0[:-1]
+        dp1 = p1[1:] - p1[:-1]
+        # first motion is always start...
+        this_motions = ["START"]
+        for dip0, dip1 in zip(dp0, dp1):
+            if dip0 == 0 or dip1 == 0:
+                this_motions.append("OBLIQUE")
+            elif dip0 == dip1:
+                this_motions.append("DIRECT")
+            elif dip0 > 0 and dip1 < 0:
+                this_motions.append("CONTRARY")
+            elif dip0 < 0 and dip1 > 0:
+                this_motions.append("CONTRARY")
+            elif dip0 < 0 and dip1 < 0:
+                this_motions.append("SIMILAR")
+            elif dip0 > 0 and dip1 > 0:
+                this_motions.append("SIMILAR")
+            else:
+                raise ValueError("Should never see this case!")
+        this_motions.append("END")
+        motions.append(this_motions)
+    return motions
 
 
-def rules_from_midi(parts, durations, key_signature):
+def two_voice_rules_from_midi(parts, durations, key_signature):
     parts, durations = fixup_parts_durations(parts, durations)
     full_intervals = intervals_from_midi(parts, durations)
     full_motions = motion_from_midi(parts, durations)
@@ -456,9 +474,9 @@ def rsp(rule):
     return rule.split("->")
 
 
-def key_start_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+def key_start_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices, three_voice_relaxation=False, voice_labels=(0, 1)):
     # ignore voices not used
-    rules = rules_from_midi(parts, durations, key_signature)
+    rules = two_voice_rules_from_midi(parts, durations, key_signature)
     rules = rules[0]
     key = key_signature_inv_map[key_signature]
     returns = []
@@ -470,20 +488,20 @@ def key_start_rule(parts, durations, key_signature, time_signature, mode, timing
             # get rid of the K in the front
             lk = lk[1:]
             # check that note is in key?
-            if ti == "P8" or ti == "P5" or ti == "P1" or ti == "RP1":
+            if ti == "P12" or ti == "P8" or ti == "P5" or ti == "P1" or ti == "RP1":
                 if lnb[:-1] == mode or lnb == "R":
                     returns.append((True, "key_start_rule: TRUE, start is in mode"))
                 else:
                     returns.append((False, "key_start_rule: FALSE, first bass note {} doesn't match estimated mode {}".format(lnb, mode)))
             else:
-                returns.append((False, "key_start_rule: FALSE, first interval {} is not in ['P1', 'P5', 'P8']".format(ti)))
+                returns.append((False, "key_start_rule: FALSE, first interval {} is not in ['P1', 'P5', 'P8', 'P12']".format(ti)))
         else:
             returns.append((None, "key_start_rule: NONE, not applicable"))
     return returns
 
 
-def next_step_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
-    rules = rules_from_midi(parts, durations, key_signature)
+def next_step_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices, three_voice_relaxation=True, voice_labels=(0, 1)):
+    rules = two_voice_rules_from_midi(parts, durations, key_signature)
     rules = rules[0]
     key = key_signature_inv_map[key_signature]
     returns = []
@@ -517,13 +535,13 @@ def next_step_rule(parts, durations, key_signature, time_signature, mode, timing
             if voice_ok is False:
                 continue
             if this_step in ["a4", "-a4"]:
-                msg = "next_step_rule: FALSE, voice {} stepwise movement {}->{}, {} not allowed".format(n, note_sets[n][0], note_sets[n][1], this_step)
+                msg = "next_step_rule: FALSE, voice {} stepwise movement {}->{}, {} not allowed".format(voice_labels[n], note_sets[n][0], note_sets[n][1], this_step)
                 voice_ok = False
             elif this_step in ["P8", "-P8", "m6", "M6", "-m6", "-M6", "-M3", "-m3"]:
-                msg = "next_step_rule: TRUE, voice {} skip {}->{}, {} acceptable".format(n, note_sets[n][0], note_sets[n][1], this_step)
+                msg = "next_step_rule: TRUE, voice {} skip {}->{}, {} acceptable".format(voice_labels[n], note_sets[n][0], note_sets[n][1], this_step)
                 voice_ok = True
             elif abs(int(voice_step)) > 7:
-                msg = "next_step_rule: FALSE, voice {} stepwise skip {}->{}, {} too large".format(n, note_sets[n][0], note_sets[n][1], this_step)
+                msg = "next_step_rule: FALSE, voice {} stepwise skip {}->{}, {} too large".format(voice_labels[n], note_sets[n][0], note_sets[n][1], this_step)
                 voice_ok = False
             else:
                 msg = "next_step_rule: TRUE, step move valid"
@@ -533,7 +551,7 @@ def next_step_rule(parts, durations, key_signature, time_signature, mode, timing
 
 
 def leap_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
-    rules = rules_from_midi(parts, key_signature)
+    rules = two_voice_rules_from_midi(parts, key_signature)
     rules = rules[0]
     key = key_signature_inv_map[key_signature]
     returns = []
@@ -566,9 +584,10 @@ def leap_rule(parts, durations, key_signature, time_signature, mode, timings, ig
     return returns
 
 
-def parallel_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+def parallel_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices,
+                  three_voice_relaxation=False, voice_labels=(0, 1)):
     # ignore voices not used
-    rules = rules_from_midi(parts, durations, key_signature)
+    rules = two_voice_rules_from_midi(parts, durations, key_signature)
     rules = rules[0]
     key = key_signature_inv_map[key_signature]
     returns = []
@@ -586,12 +605,17 @@ def parallel_rule(parts, durations, key_signature, time_signature, mode, timings
         dn1 = np.diff(np.array(notes_to_midi([[tn1, ln1]])[0]))
         note_sets = [[ln0, tn0], [ln1, tn1]]
         if li == "M10" or li == "m10":
-            if ti == "P8" and timings[0][idx] == 0.:
+            if not three_voice_relaxation and ti == "P8" and timings[0][idx] == 0.:
                 # battuta octave
                 returns.append((False, "parallel_rule: FALSE, battuta octave {}->{} disallowed on first beat".format(li, ti)))
                 continue
         if ti in perfect_intervals or ti in neg_perfect_intervals:
-            if tm in allowed_perfect_motion:
+            if three_voice_relaxation:
+                allowed = allowed_perfect_motion
+                allowed["SIMILAR"] = None
+            else:
+                allowed = allowed_perfect_motion
+            if tm in allowed:
                 returns.append((True, "parallel_rule: TRUE, movement {} into perfect interval {} allowed".format(tm, ti)))
                 continue
             else:
@@ -609,7 +633,7 @@ def parallel_rule(parts, durations, key_signature, time_signature, mode, timings
 
 def beat_parallel_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
     # ignore voices not used
-    rules = rules_from_midi(parts, durations, key_signature)
+    rules = two_voice_rules_from_midi(parts, durations, key_signature)
     rules = rules[0]
     key = key_signature_inv_map[key_signature]
     returns = []
@@ -656,9 +680,9 @@ def beat_parallel_rule(parts, durations, key_signature, time_signature, mode, ti
     return returns
 
 
-def bar_consonance_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+def bar_consonance_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices, three_voice_relaxation=True, voice_labels=(0, 1)):
     # ignore voices not used
-    rules = rules_from_midi(parts, durations, key_signature)
+    rules = two_voice_rules_from_midi(parts, durations, key_signature)
     rules = rules[0]
     key = key_signature_inv_map[key_signature]
     returns = []
@@ -718,7 +742,7 @@ def bar_consonance_rule(parts, durations, key_signature, time_signature, mode, t
 
 def passing_tone_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
     # ignore voices not used
-    rules = rules_from_midi(parts, durations, key_signature)
+    rules = two_voice_rules_from_midi(parts, durations, key_signature)
     rules = rules[0]
     key = key_signature_inv_map[key_signature]
     returns = []
@@ -765,7 +789,7 @@ def passing_tone_rule(parts, durations, key_signature, time_signature, mode, tim
 
 
 def sequence_step_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
-    rules = rules_from_midi(parts, durations, key_signature)
+    rules = two_voice_rules_from_midi(parts, durations, key_signature)
     rules = rules[0]
     key = key_signature_inv_map[key_signature]
     returns = []
@@ -879,17 +903,17 @@ def sequence_step_rule(parts, durations, key_signature, time_signature, mode, ti
             from IPython import embed; embed(); raise ValueError()
     return returns
 
-species1_rules_map = OrderedDict()
-species1_rules_map["key_start_rule"] = key_start_rule
-species1_rules_map["bar_consonance_rule"] = bar_consonance_rule
-species1_rules_map["next_step_rule"] = next_step_rule
-species1_rules_map["parallel_rule"] = parallel_rule
+two_voice_species1_rules_map = OrderedDict()
+two_voice_species1_rules_map["key_start_rule"] = key_start_rule
+two_voice_species1_rules_map["bar_consonance_rule"] = bar_consonance_rule
+two_voice_species1_rules_map["next_step_rule"] = next_step_rule
+two_voice_species1_rules_map["parallel_rule"] = parallel_rule
 
 # leap rule is not a rule :|
 #all_rules_map["leap_rule"] = leap_rule
 
-def check_species1_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
-    res = [species1_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in species1_rules_map.keys()]
+def check_two_voice_species1_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+    res = [two_voice_species1_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in two_voice_species1_rules_map.keys()]
 
     global_check = True
     for r in res:
@@ -900,15 +924,15 @@ def check_species1_rule(parts, durations, key_signature, time_signature, mode, t
             global_check = False
     return (global_check, res)
 
-species2_rules_map = OrderedDict()
-species2_rules_map["key_start_rule"] = key_start_rule
-species2_rules_map["bar_consonance_rule"] = bar_consonance_rule
-species2_rules_map["parallel_rule"] = parallel_rule
-species2_rules_map["beat_parallel_rule"] = beat_parallel_rule
-species2_rules_map["next_step_rule"] = next_step_rule
-species2_rules_map["passing_tone_rule"] = passing_tone_rule
-def check_species2_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
-    res = [species2_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in species2_rules_map.keys()]
+two_voice_species2_rules_map = OrderedDict()
+two_voice_species2_rules_map["key_start_rule"] = key_start_rule
+two_voice_species2_rules_map["bar_consonance_rule"] = bar_consonance_rule
+two_voice_species2_rules_map["parallel_rule"] = parallel_rule
+two_voice_species2_rules_map["beat_parallel_rule"] = beat_parallel_rule
+two_voice_species2_rules_map["next_step_rule"] = next_step_rule
+two_voice_species2_rules_map["passing_tone_rule"] = passing_tone_rule
+def check_two_voice_species2_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+    res = [two_voice_species2_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in two_voice_species2_rules_map.keys()]
 
     global_check = True
     for r in res:
@@ -919,15 +943,15 @@ def check_species2_rule(parts, durations, key_signature, time_signature, mode, t
             global_check = False
     return (global_check, res)
 
-species3_rules_map = OrderedDict()
-species3_rules_map["key_start_rule"] = key_start_rule
-species3_rules_map["bar_consonance_rule"] = bar_consonance_rule
-species3_rules_map["parallel_rule"] = parallel_rule
-species3_rules_map["beat_parallel_rule"] = beat_parallel_rule
-species3_rules_map["next_step_rule"] = next_step_rule
-species3_rules_map["sequence_step_rule"] = sequence_step_rule
-def check_species3_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
-    res = [species3_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in species3_rules_map.keys()]
+two_voice_species3_rules_map = OrderedDict()
+two_voice_species3_rules_map["key_start_rule"] = key_start_rule
+two_voice_species3_rules_map["bar_consonance_rule"] = bar_consonance_rule
+two_voice_species3_rules_map["parallel_rule"] = parallel_rule
+two_voice_species3_rules_map["beat_parallel_rule"] = beat_parallel_rule
+two_voice_species3_rules_map["next_step_rule"] = next_step_rule
+two_voice_species3_rules_map["sequence_step_rule"] = sequence_step_rule
+def check_two_voice_species3_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+    res = [two_voice_species3_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in two_voice_species3_rules_map.keys()]
 
     global_check = True
     for r in res:
@@ -938,15 +962,15 @@ def check_species3_rule(parts, durations, key_signature, time_signature, mode, t
             global_check = False
     return (global_check, res)
 
-species4_rules_map = OrderedDict()
-species4_rules_map["key_start_rule"] = key_start_rule
-species4_rules_map["bar_consonance_rule"] = bar_consonance_rule
-species4_rules_map["parallel_rule"] = parallel_rule
-species4_rules_map["beat_parallel_rule"] = beat_parallel_rule
-species4_rules_map["next_step_rule"] = next_step_rule
-species4_rules_map["sequence_step_rule"] = sequence_step_rule
-def check_species4_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
-    res = [species4_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in species3_rules_map.keys()]
+two_voice_species4_rules_map = OrderedDict()
+two_voice_species4_rules_map["key_start_rule"] = key_start_rule
+two_voice_species4_rules_map["bar_consonance_rule"] = bar_consonance_rule
+two_voice_species4_rules_map["parallel_rule"] = parallel_rule
+two_voice_species4_rules_map["beat_parallel_rule"] = beat_parallel_rule
+two_voice_species4_rules_map["next_step_rule"] = next_step_rule
+two_voice_species4_rules_map["sequence_step_rule"] = sequence_step_rule
+def check_two_voice_species4_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+    res = [two_voice_species4_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in two_voice_species4_rules_map.keys()]
 
     global_check = True
     for r in res:
@@ -1008,19 +1032,19 @@ def analyze_two_voices(parts, durations, key_signature_str, time_signature_str, 
 
     parts, durations = fixup_parts_durations(parts, durations)
 
-    rules = rules_from_midi(parts, durations, key_signature)
+    rules = two_voice_rules_from_midi(parts, durations, key_signature)
     mode = estimate_mode(parts, durations, rules, key_signature)
     timings = estimate_timing(parts, durations, time_signature)
 
     ignore_voices = cantus_firmus_voices
     if species == "species1":
-        r = check_species1_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
+        r = check_two_voice_species1_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
     elif species == "species2":
-        r = check_species2_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
+        r = check_two_voice_species2_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
     elif species == "species3":
-        r = check_species3_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
+        r = check_two_voice_species3_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
     elif species == "species4":
-        r = check_species4_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
+        r = check_two_voice_species4_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
     else:
         raise ValueError("Unknown species argument {}".format(species))
     all_ok = r[0]
@@ -1227,6 +1251,113 @@ def test_two_voice_species4():
             print("Test passed for note sequence {}".format(fig_name))
 
 
+def three_voice_rules_from_midi(parts, durations, key_signature):
+    parts, durations = fixup_parts_durations(parts, durations)
+    full_intervals = intervals_from_midi(parts, durations)
+    full_motions = motion_from_midi(parts, durations)
+
+    assert len(full_intervals) == len(full_motions)
+    all_rulesets = []
+    for fi, fm in zip(full_intervals, full_motions):
+        i = 0
+        fimi = 0
+        this_ruleset = []
+        while i < len(fi):
+            this_interval = fi[i]
+            this_motion = fm[i]
+            this_notes = tuple([p[i] for p in parts])
+            last_interval = None
+            last_motion = None
+            last_notes = None
+            if i > 0:
+                last_interval = fi[i - 1]
+                last_notes = tuple([p[i - 1] for p in parts])
+                last_motion = fm[i - 1]
+            this_ruleset.append(make_rule(this_interval, this_motion, this_notes,
+                                          key_signature,
+                                          last_interval, last_motion, last_notes))
+            i += 1
+        all_rulesets.append(this_ruleset)
+    assert len(all_rulesets[0]) == len(full_intervals[0])
+    for ar in all_rulesets:
+        assert len(ar) == len(all_rulesets[0])
+    return all_rulesets
+
+three_voice_species1_rules_map = OrderedDict()
+three_voice_species1_rules_map["key_start_rule"] = key_start_rule
+three_voice_species1_rules_map["bar_consonance_rule"] = bar_consonance_rule
+three_voice_species1_rules_map["next_step_rule"] = next_step_rule
+three_voice_species1_rules_map["parallel_rule"] = parallel_rule
+
+# leap rule is not a rule :|
+#all_rules_map["leap_rule"] = leap_rule
+
+def check_three_voice_species1_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+
+    pairs = [(0, 2), (1, 2), (0, 1)]
+    res = []
+    for n, pair in enumerate(pairs):
+        if n > 0:
+            # skip key start rule on inner voices
+            skip_rules = ["key_start_rule"]
+        else:
+            skip_rules = []
+        res_i = [three_voice_species1_rules_map[arm]([parts[pair[0]], parts[pair[1]]],
+                    [durations[pair[0]], durations[pair[1]]], key_signature,
+                    time_signature, mode, [timings[pair[0]], timings[pair[1]]],
+                    ignore_voices=[], three_voice_relaxation=True, voice_labels=pair)
+                for arm in three_voice_species1_rules_map.keys() if arm not in skip_rules]
+        res.append(res_i)
+
+    global_check = True
+    for res_i in res:
+        for r in res_i:
+            rr = [True if ri[0] is True or ri[0] is None else False for ri in r]
+            if all(rr):
+                pass
+            else:
+                global_check = False
+    return (global_check, res)
+
+
+def analyze_three_voices(parts, durations, key_signature_str, time_signature_str, species="species1",
+                         cantus_firmus_voices=None):
+    # not ideal but keeps stuff consistent
+    key_signature = key_signature_map[key_signature_str]
+    # just check that it parses here
+    time_signature = time_signature_map[time_signature_str]
+    beats_per_measure = time_signature[0]
+    duration_unit = time_signature[1]
+
+    parts, durations = fixup_parts_durations(parts, durations)
+
+    rules = three_voice_rules_from_midi(parts, durations, key_signature)
+    mode = estimate_mode(parts, durations, rules, key_signature)
+    timings = estimate_timing(parts, durations, time_signature)
+
+    ignore_voices = cantus_firmus_voices
+    if species == "species1":
+        r = check_three_voice_species1_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
+    else:
+        raise ValueError("Unknown species argument {}".format(species))
+    all_ok = r[0]
+    true_false = OrderedDict()
+    true_false["True"] = []
+    true_false["False"] = []
+    this_ok = []
+    for res_i in r[1]:
+        for rr in res_i:
+            for n in range(len(rr)):
+                this_ok.append((n, rr[n][0], rr[n][1]))
+                if rr[n][0] == True or rr[n][0] == None:
+                    true_false["True"].append(n)
+                else:
+                    true_false["False"].append(n)
+    true_false["True"] = sorted(list(set(true_false["True"])))
+    true_false["False"] = sorted(list(set(true_false["False"])))
+    return (all_ok, true_false, rules, sorted(this_ok))
+
+
 def test_three_voice_species1():
     print("Running test for three voice species1...")
     all_ex = fetch_three_voice_species1()
@@ -1243,8 +1374,8 @@ def test_three_voice_species1():
         parts = notes_to_midi(notes)
         key_signature = "C"
         time_signature = "4/4"
-        aok = analyze_two_voices(parts, durations, key_signature, time_signature,
-                                 species="species4", cantus_firmus_voices=ig)
+        aok = analyze_three_voices(parts, durations, key_signature, time_signature,
+                                   species="species1", cantus_firmus_voices=ig)
         aok_lu = aok[1]
         aok_rules = aok[2]
 
@@ -1281,16 +1412,17 @@ if __name__ == "__main__":
     from datasets import fetch_two_voice_species2
     from datasets import fetch_two_voice_species3
     from datasets import fetch_two_voice_species4
+    from datasets import fetch_three_voice_species1
 
     parser.add_argument('-p', action="store_true", default=False)
     args = parser.parse_args()
     print_it = args.p
     if not print_it:
-        test_two_voice_species1()
-        test_two_voice_species2()
-        test_two_voice_species3()
-        test_two_voice_species4()
-        #test_three_voice_species1()
+        #test_two_voice_species1()
+        #test_two_voice_species2()
+        #test_two_voice_species3()
+        #test_two_voice_species4()
+        test_three_voice_species1()
     else:
         """
         # fig 5, gradus ad parnassum

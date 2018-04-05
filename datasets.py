@@ -376,3 +376,18 @@ def fetch_two_voice_species4():
           "cantus_firmus_voice": 0}
     all_ex.append(ex)
     return all_ex
+
+def fetch_three_voice_species1():
+    all_ex = []
+
+    # All figure numbers from Gradus ad Parnassum
+    # fig 5, correct notes
+    ex = {"notes_and_durations": [[('G4', '4'), ('F4', '4'), ('E4', '4'), ('D4', '4'), ('D4', '4'), ('C4', '4')],
+                                  [('E4', '4'), ('D4', '4'), ('C4', '4'), ('A3', '4'), ('B3', '4'), ('C4', '4')],
+                                  [('C3', '4'), ('D3', '4'), ('E3', '4'), ('F3', '4'), ('G3', '4'), ('C3', '4')]],
+          "answers": [True] * 6,
+          "name": "fig91",
+          "cantus_firmus_voice": 2}
+    all_ex.append(ex)
+    return all_ex
+
