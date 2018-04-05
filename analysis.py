@@ -1406,7 +1406,6 @@ def test_three_voice_species1():
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Demo of utils")
 
     from datasets import fetch_two_voice_species1
     from datasets import fetch_two_voice_species2
@@ -1414,47 +1413,47 @@ if __name__ == "__main__":
     from datasets import fetch_two_voice_species4
     from datasets import fetch_three_voice_species1
 
-    parser.add_argument('-p', action="store_true", default=False)
-    args = parser.parse_args()
-    print_it = args.p
-    if not print_it:
-        #test_two_voice_species1()
-        #test_two_voice_species2()
-        #test_two_voice_species3()
-        #test_two_voice_species4()
-        test_three_voice_species1()
-    else:
-        """
-        # fig 5, gradus ad parnassum
-        notes = [["A3", "A3", "G3", "A3", "B3", "C4", "C4", "B3", "D4", "C#4", "D4"],
-                 ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]]
-        durations = [[4.] * len(notes[0]), [4.] * len(notes[1])]
-        # can add harmonic nnotations as well to plot
-        #chord_annotations = ["i", "I6", "IV", "V6", "I", "IV6", "I64", "V", "I"]
-        """
-        ex = fetch_two_voice_species3()
-        notes = ex[-2]["notes"]
-        durations = ex[-2]["durations"]
-        # can we do all these automatically?
-        parts = notes_to_midi(notes)
-        interval_figures = intervals_from_midi(parts, durations)
-        _, interval_durations = fixup_parts_durations(parts, durations)
-        interval_durations = [interval_durations[0]]
-        # need to figure out duration convention (maybe support floats and str both?)
-        durations = [[int(di) for di in d] for d in durations]
 
-        # treble, bass, treble_8, etc
-        clefs = ["treble", "treble_8"]
-        time_signatures = [(4, 4), (4, 4)]
-        pitches_and_durations_to_pretty_midi([parts], [durations],
-                                             save_dir="samples",
-                                             name_tag="sample_{}.mid",
-                                             default_quarter_length=240,
-                                             voice_params="piano")
+    #test_two_voice_species1()
+    #test_two_voice_species2()
+    #test_two_voice_species3()
+    #test_two_voice_species4()
+    test_three_voice_species1()
 
-        # figure out plotting of tied notes
-        # fix zoom
-        plot_pitches_and_durations(parts, durations,
-                                   interval_figures=interval_figures,
-                                   interval_durations=interval_durations,
-                                   use_clefs=clefs)
+    """
+    # fig 5, gradus ad parnassum
+    notes = [["A3", "A3", "G3", "A3", "B3", "C4", "C4", "B3", "D4", "C#4", "D4"],
+             ["D3", "F3", "E3", "D3", "G3", "F3", "A3", "G3", "F3", "E3", "D3"]]
+    durations = [[4.] * len(notes[0]), [4.] * len(notes[1])]
+    # can add harmonic nnotations as well to plot
+    #chord_annotations = ["i", "I6", "IV", "V6", "I", "IV6", "I64", "V", "I"]
+    """
+    ex = fetch_three_voice_species1()
+    nd = ex[-1]["notes_and_durations"]
+    notes = [[ndii[0] for ndii in ndi] for ndi in nd]
+    durations = [[ndii[1] for ndii in ndi] for ndi in nd]
+    # can we do all these automatically?
+    parts = notes_to_midi(notes)
+    interval_figures = intervals_from_midi(parts, durations)
+    _, interval_durations = fixup_parts_durations(parts, durations)
+    # need to figure out duration convention (maybe support floats and str both?)
+    durations = [[int(di) for di in d] for d in durations]
+
+    # treble, bass, treble_8, etc
+    clefs = ["treble", "treble", "bass"]
+    time_signatures = [(4, 4), (4, 4), (4, 4)]
+
+    from visualization import pitches_and_durations_to_pretty_midi
+    from visualization import plot_pitches_and_durations
+    pitches_and_durations_to_pretty_midi([parts], [durations],
+                                         save_dir="samples",
+                                         name_tag="sample_{}.mid",
+                                         default_quarter_length=240,
+                                         voice_params="piano")
+
+    # figure out plotting of tied notes
+    # fix zoom
+    plot_pitches_and_durations(parts, durations,
+                               interval_figures=interval_figures,
+                               interval_durations=interval_durations,
+                               use_clefs=clefs)

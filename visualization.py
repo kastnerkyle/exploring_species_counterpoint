@@ -867,6 +867,11 @@ def plot_lilypond(upper_voices, lower_voices=None, own_staves=False,
     if len(upper_voices) > 1:
         if lower_voices == None and own_staves==False:
             raise ValueError("Multiple voices in upper staff with own_staves=False")
+        if len(interval_durations) > (len(upper_voices) - 1):
+            print("WARNING: Truncating multi-part interval information to first {} sequences to match stave gaps, this is normal.".format(len(upper_voices) - 1))
+            interval_durations = interval_durations[:len(upper_voices) - 1]
+            interval_figures = interval_figures[:len(upper_voices) - 1]
+
     if use_clefs is None:
         use_clefs = ["treble" for i in range(len(pitches))]
     # need to align them for chord write T_T
@@ -1023,7 +1028,7 @@ tagline = "{}"
         f.write(final_ly)
 
     # also make the pdf?
-    # pe("lilypond {}".format(fpath))
+    pe("lilypond {}".format(fpath))
     pe("lilypond -fpng {}".format(fpath))
     if len(fpath.split(os.sep)) == 1:
         flist = os.listdir(os.getcwd())
