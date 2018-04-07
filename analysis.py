@@ -169,7 +169,6 @@ def intervals_from_midi(parts, durations):
                 this_intervals.append(intervals_map[p])
             except:
                 if len(parts) != 2:
-                    print("Interval exception and more than 2 parts")
                     from IPython import embed; embed(); raise ValueError()
                     raise ValueError("Intervals from midi, 3 voice - needs fix!")
                 if parts[0][idx] == 0:
@@ -1421,10 +1420,10 @@ if __name__ == "__main__":
     from datasets import fetch_three_voice_species1
 
 
-    #test_two_voice_species1()
-    #test_two_voice_species2()
-    #test_two_voice_species3()
-    #test_two_voice_species4()
+    test_two_voice_species1()
+    test_two_voice_species2()
+    test_two_voice_species3()
+    test_two_voice_species4()
     test_three_voice_species1()
 
     """
