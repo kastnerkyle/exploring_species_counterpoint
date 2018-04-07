@@ -169,6 +169,8 @@ def intervals_from_midi(parts, durations):
                 this_intervals.append(intervals_map[p])
             except:
                 if len(parts) != 2:
+                    print("Interval exception and more than 2 parts")
+                    from IPython import embed; embed(); raise ValueError()
                     raise ValueError("Intervals from midi, 3 voice - needs fix!")
                 if parts[0][idx] == 0:
                     # rest in part 0
@@ -292,7 +294,17 @@ time_signature_map = {}
 time_signature_map["4/4"] = (4, 1)
 
 key_check = {"C": ["C", "D", "E", "F", "G", "A", "B"]}
-intervals_map = {-16: "-M10",
+intervals_map = {-28: "-M17",
+                -27: "-m17",
+                -26: "-M16",
+                -25: "-m16",
+                -24: "-P15",
+                -21: "-M13",
+                -20: "-m13",
+                -19: "-P12",
+                -18: "-a11",
+                -17: "-P11",
+                -16: "-M10",
                 -15: "-m10",
                 -14: "-M9",
                 -13: "-m9",
@@ -329,7 +341,12 @@ intervals_map = {-16: "-M10",
                 18: "a11",
                 19: "P12",
                 20: "m13",
-                21: "M13"}
+                21: "M13",
+                24: "P15",
+                25: "m16",
+                26: "M16",
+                27: "m17",
+                28: "M17"}
 
 inverse_intervals_map = {v: k for k, v in intervals_map.items()}
 
@@ -356,12 +373,9 @@ perfect_intervals = {"P1": None,
                      "P5": None,
                      "P4": None,
                      "P11": None,
-                     "P12": None}
-neg_perfect_intervals = {"-P8": None,
-                         "-P5": None,
-                         "-P4": None,
-                         "-P11": None,
-                         "-P12": None}
+                     "P12": None,
+                     "P15": None}
+neg_perfect_intervals = {"-"+str(k): None for k in perfect_intervals.keys() if "R" not in k}
 harmonic_intervals = {"RP1": None,
                       "P1": None,
                       "P8": None,
@@ -376,19 +390,11 @@ harmonic_intervals = {"RP1": None,
                       "P11": None,
                       "P12": None,
                       "m13": None,
-                      "M13": None}
-neg_harmonic_intervals = {"-P8": None,
-                          "-P5": None,
-                          "-P4": None,
-                          "-m3": None,
-                          "-M3": None,
-                          "-m6": None,
-                          "-M6": None,
-                          "-m10": None,
-                          "-M10": None,
-                          "-P11": None,
-                          "-P12": None}
-
+                      "M13": None,
+                      "P15": None,
+                      "m17": None,
+                      "M17": None}
+neg_harmonic_intervals = {"-"+str(k): None for k in harmonic_intervals.keys() if "R" not in k}
 nonharmonic_intervals = {"m2": None,
                          "M2": None,
                          "a4": None,
@@ -397,17 +403,7 @@ nonharmonic_intervals = {"m2": None,
                          "m9": None,
                          "M9": None,
                          "a11": None}
-neg_nonharmonic_intervals = {"-m2": None,
-                             "-M2": None,
-                             "-a4": None,
-                             "-m7": None,
-                             "-M7": None,
-                             "-m9": None,
-                             "-M9": None,
-                             "-a11": None}
-
-hamonic_intervals = {k: v for k, v in inverse_intervals_map.items()
-                     if k in harmonic_intervals}
+neg_nonharmonic_intervals = {"-"+str(k): None for k in nonharmonic_intervals.keys() if "R" not in k}
 
 allowed_perfect_motion = {"CONTRARY": None,
                           "OBLIQUE": None}
@@ -458,10 +454,13 @@ def estimate_mode(parts, durations, rules, key_signature):
     elif final_notes[-1, -1] == final_notes[0, 0]:
         mode = midi_to_notes([[final_notes[-1, -1]]])[0][0][:-1] # strip octave
         return mode
-    elif rules[-1][-1].split("->")[-1].split(":")[1] in ["P8", "P1"]:
+    elif rules[0][-1].split("->")[-1].split(":")[1] in ["P8", "P1", "P15"]:
         mode = midi_to_notes([[final_notes[-1, -1]]])[0][0][:-1] # strip octave
         return mode
-    elif rules[-1][0].split("->")[-1].split(":")[1] in ["RP1",]:
+    elif rules[0][0].split("->")[-1].split(":")[1] in ["RP1",]:
+        mode = midi_to_notes([[final_notes[-1, -1]]])[0][0][:-1] # strip octave
+        return mode
+    elif rules[1][-1].split("->")[-1].split(":")[1] in ["P8", "P1", "P15"]:
         mode = midi_to_notes([[final_notes[-1, -1]]])[0][0][:-1] # strip octave
         return mode
     else:
@@ -488,7 +487,11 @@ def key_start_rule(parts, durations, key_signature, time_signature, mode, timing
             # get rid of the K in the front
             lk = lk[1:]
             # check that note is in key?
-            if ti == "P12" or ti == "P8" or ti == "P5" or ti == "P1" or ti == "RP1":
+            if three_voice_relaxation:
+                check = (ti == "P12" or ti == "M10" or ti == "m10" or ti == "P8" or ti == "M6" or ti == "m6" or ti == "P5" or ti == "M3" or ti == "m3" or ti == "P1" or ti == "RP1")
+            else:
+                check = (ti == "P12" or ti == "P8" or ti == "P5" or ti == "P1" or ti == "RP1")
+            if check:
                 if lnb[:-1] == mode or lnb == "R":
                     returns.append((True, "key_start_rule: TRUE, start is in mode"))
                 else:
@@ -1310,7 +1313,8 @@ def check_three_voice_species1_rule(parts, durations, key_signature, time_signat
         res.append(res_i)
 
     global_check = True
-    for res_i in res:
+    # only check top 2 voices
+    for res_i in res[:-1]:
         for r in res_i:
             rr = [True if ri[0] is True or ri[0] is None else False for ri in r]
             if all(rr):
@@ -1345,7 +1349,8 @@ def analyze_three_voices(parts, durations, key_signature_str, time_signature_str
     true_false["True"] = []
     true_false["False"] = []
     this_ok = []
-    for res_i in r[1]:
+    # only check top 2 voice pairs
+    for res_i in r[1][:-1]:
         for rr in res_i:
             for n in range(len(rr)):
                 this_ok.append((n, rr[n][0], rr[n][1]))
@@ -1400,8 +1405,10 @@ def test_three_voice_species1():
         equal = [aa == a for aa, a in zip(all_answers, answers)]
         if not all(equal):
             print("Test FAIL for note sequence {}".format(fig_name))
+            from IPython import embed; embed(); raise ValueError()
         else:
             print("Test passed for note sequence {}".format(fig_name))
+
 
 
 if __name__ == "__main__":
