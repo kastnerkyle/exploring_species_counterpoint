@@ -1421,9 +1421,9 @@ if __name__ == "__main__":
 
 
     test_two_voice_species1()
-    test_two_voice_species2()
-    test_two_voice_species3()
-    test_two_voice_species4()
+    #test_two_voice_species2()
+    #test_two_voice_species3()
+    #test_two_voice_species4()
     test_three_voice_species1()
 
     """
