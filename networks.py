@@ -8,12 +8,12 @@ import numpy as np
 
 
 class PolicyValueNetwork(nn.Module):
-    def __init__(self, lower_size, prev_size, hidden_size=64, proj_size=32):
+    def __init__(self, lower_size, prev_size, policy_size, hidden_size=64, proj_size=32):
         super(PolicyValueNetwork, self).__init__()
         self.value_size = 1
         self.lower_size = lower_size
         self.prev_size = prev_size
-        self.policy_size = prev_size
+        self.policy_size = policy_size
         self.hidden_size = hidden_size
         self.proj_size = proj_size
         #input_size = 12
@@ -157,5 +157,3 @@ if __name__ == "__main__":
         loss.backward()
         optimizer.step()
     from IPython import embed; embed(); raise ValueError()
-
-

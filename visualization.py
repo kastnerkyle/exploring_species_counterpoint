@@ -867,13 +867,13 @@ def plot_lilypond(upper_voices, lower_voices=None, own_staves=False,
     if len(upper_voices) > 1:
         if lower_voices == None and own_staves==False:
             raise ValueError("Multiple voices in upper staff with own_staves=False")
-        if len(interval_durations) > (len(upper_voices) - 1):
+        if interval_durations is not None and len(interval_durations) > (len(upper_voices) - 1):
             print("WARNING: Truncating multi-part interval information to first {} sequences to match stave gaps, this is normal.".format(len(upper_voices) - 1))
             interval_durations = interval_durations[:len(upper_voices) - 1]
             interval_figures = interval_figures[:len(upper_voices) - 1]
 
     if use_clefs is None:
-        use_clefs = ["treble" for i in range(len(pitches))]
+        use_clefs = ["treble" for i in range(len(upper_voices))]
     # need to align them for chord write T_T
     # for now assume 4/4
     pre = '\\version "2.12.3"'

@@ -12,6 +12,7 @@
 
 import numpy as np
 from common_mcts import TreeNode
+import copy
 
 
 def softmax(x):
@@ -19,6 +20,7 @@ def softmax(x):
     probs = np.exp(x - np.max(x))
     probs /= np.sum(probs)
     return probs
+
 
 class NetMCTS(object):
     def __init__(self, policy_value_fn, state_manager, c_puct=1.4, n_playout=1000, random_state=None):
@@ -58,8 +60,10 @@ class NetMCTS(object):
                 state = self.state_manager.next_state(state, action)
 
     def get_move_probs(self, state, temp=1E-3):
+        mgr = copy.deepcopy(self.state_manager)
         for n in range(self.n_playout):
             self.playout(state)
+            self.state_manager = copy.deepcopy(mgr)
 
         act_visits = [(act, node.n_visits_) for act, node in self.root.children_.items()]
         acts, visits = zip(*act_visits)
@@ -75,7 +79,7 @@ class NetMCTS(object):
             move = self.random_state.choice(acts, p=(1. - dirichlet_coeff1) * probs + dirichlet_coeff1 * self.random_state.dirichlet(dirichlet_coeff2 * np.ones(len(probs))))
         else:
             move = random_state.choice(acts, p=probs)
-        return move
+        return move, move_probs
 
     def update_to_move(self, move):
         # keep previous info, descend down the tree

@@ -298,6 +298,8 @@ intervals_map = {-28: "-M17",
                 -26: "-M16",
                 -25: "-m16",
                 -24: "-P15",
+                -23: "-M14",
+                -22: "-m14",
                 -21: "-M13",
                 -20: "-m13",
                 -19: "-P12",
@@ -341,6 +343,8 @@ intervals_map = {-28: "-M17",
                 19: "P12",
                 20: "m13",
                 21: "M13",
+                22: "m14",
+                23: "M14",
                 24: "P15",
                 25: "m16",
                 26: "M16",
@@ -401,7 +405,9 @@ nonharmonic_intervals = {"m2": None,
                          "M7": None,
                          "m9": None,
                          "M9": None,
-                         "a11": None}
+                         "a11": None,
+                         "m14": None,
+                         "M14": None}
 neg_nonharmonic_intervals = {"-"+str(k): None for k in nonharmonic_intervals.keys() if "R" not in k}
 
 allowed_perfect_motion = {"CONTRARY": None,
@@ -459,12 +465,15 @@ def estimate_mode(parts, durations, rules, key_signature):
     elif rules[0][0].split("->")[-1].split(":")[1] in ["RP1",]:
         mode = midi_to_notes([[final_notes[-1, -1]]])[0][0][:-1] # strip octave
         return mode
-    elif rules[1][-1].split("->")[-1].split(":")[1] in ["P8", "P1", "P15"]:
+    elif len(rules) > 1 and rules[1][-1].split("->")[-1].split(":")[1] in ["P8", "P1", "P15"]:
         mode = midi_to_notes([[final_notes[-1, -1]]])[0][0][:-1] # strip octave
         return mode
     else:
-        print("Unknown mode estimate...")
-        from IPython import embed; embed(); raise ValueError()
+        # use the last note, bass as mode estimate
+        mode = midi_to_notes([[final_notes[-1, -1]]])[0][0][:-1] # strip octave
+        return mode
+        #print("Unknown mode estimate...")
+        #from IPython import embed; embed(); raise ValueError()
     raise ValueError("This function must return before the end! Bug, rule {}".format(rule))
 
 
@@ -530,6 +539,10 @@ def next_step_rule(parts, durations, key_signature, time_signature, mode, timing
                     if msg is None:
                         msg = "next_step_rule: NONE, rest in voice"
                     continue
+                else:
+                    print("error in next step rule")
+                    from IPython import embed; embed(); raise ValueError()
+
             if ignore_voices is not None and n in ignore_voices:
                 if msg is None:
                     msg = "next_step_rule: NONE, skipped voice"
