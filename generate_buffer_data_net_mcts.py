@@ -169,24 +169,43 @@ if __name__ == "__main__":
         trace_random_state = np.random.RandomState(random_state.randint(1000000000))
         trace_results = get_trace(trace_random_state)
         trace_data.append(trace_results)
+    # scaled rewards are from 0-1, with 1 being a complete sequence correct
+    scaled_reward = [min(td[-1][1]["False"]) / float(len(td[-1][2][0])) for td in trace_data]
+    scaled_reward = [sr if sr > 0 else -1. for sr in scaled_reward]
 
-    # plot the output traces
-    parts = trace_data[0][-2]
-    durations = [['4'] * len(p) for p in parts]
-    interval_figures = intervals_from_midi(parts, durations)
-    _, interval_durations = fixup_parts_durations(parts, durations)
-    interval_durations = [interval_durations[0]]
-    durations = [[int(di) for di in d] for d in durations]
+    # plot the best output trace
+    argmax = [n for n, sr in enumerate(scaled_reward) if sr == max(scaled_reward)][0]
+    argmin = [n for n, sr in enumerate(scaled_reward) if sr == min(scaled_reward)][0]
+    all_parts = []
+    all_durations = []
+    for ai in [argmax, argmin]:
+        if ai == argmax:
+            print("Plotting best example {}".format(ai))
+        else:
+            print("Plotting worst example {}".format(ai))
+        #parts = trace_data[0][-2]
+        parts = trace_data[ai][-2]
+        durations = [['4'] * len(p) for p in parts]
+        interval_figures = intervals_from_midi(parts, durations)
+        _, interval_durations = fixup_parts_durations(parts, durations)
+        interval_durations = [interval_durations[0]]
+        durations = [[int(di) for di in d] for d in durations]
+        all_parts.append(parts)
+        all_durations.append(durations)
+
     key_signature = "C"
     time_signature = "4/4"
-    pitches_and_durations_to_pretty_midi([parts], [durations],
-                                         save_dir="samples",
-                                         name_tag="sample_{}.mid",
-                                         default_quarter_length=240,
-                                         voice_params="piano")
     clefs = ["treble", "bass"]
-    plot_pitches_and_durations(parts, durations)
+    plot_pitches_and_durations(all_parts, all_durations,
+                               save_dir="mcts_plots",
+                               name_tag="mcts_plot_{}.ly")
                                #interval_figures=interval_figures,
                                #interval_durations=interval_durations,
                                #use_clefs=clefs)
+    # now dump samples
+    pitches_and_durations_to_pretty_midi(all_parts, all_durations,
+                                         save_dir="mcts_samples",
+                                         name_tag="mcts_sample_{}.mid",
+                                         default_quarter_length=240,
+                                         voice_params="piano")
     from IPython import embed; embed(); raise ValueError()

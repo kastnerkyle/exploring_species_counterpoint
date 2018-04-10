@@ -597,6 +597,8 @@ def pitches_and_durations_to_pretty_midi(pitches, durations,
                                          list_of_quarter_length=None,
                                          default_quarter_length=47,
                                          voice_params="woodwinds"):
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
     # allow list of list of list
     """
     takes in list of list of list, or list of array with axis 0 time, axis 1 voice_number (S,A,T,B)
@@ -1030,18 +1032,20 @@ tagline = "{}"
     # also make the pdf?
     pe("lilypond {}".format(fpath))
     pe("lilypond -fpng {}".format(fpath))
-    if len(fpath.split(os.sep)) == 1:
-        flist = os.listdir(os.getcwd())
-    else:
-        flist = os.listdir(str(os.sep).join(fpath.split(os.sep)[:-1]))
-    valid_files_name = ".".join(fpath.split(os.sep)[-1].split(".")[:-1])
-    flist = [fl for fl in flist if valid_files_name in fl]
-    # hardcode to only show 1 page for now...
-    flist = [fl for fl in flist if "page1" in fl or "page" not in fl]
-    latest_file = max(flist, key=os.path.getctime)
     if show:
         import matplotlib.pyplot as plt
         import matplotlib.image as mpimg
+
+        if len(fpath.split(os.sep)) == 1:
+            flist = os.listdir(os.getcwd())
+        else:
+            flist = os.listdir(str(os.sep).join(fpath.split(os.sep)[:-1]))
+
+        valid_files_name = ".".join(fpath.split(os.sep)[-1].split(".")[:-1])
+        flist = [fl for fl in flist if valid_files_name in fl]
+        # hardcode to only show 1 page for now...
+        flist = [fl for fl in flist if "page1" in fl or "page" not in fl]
+        latest_file = max(flist, key=os.path.getctime)
         img = mpimg.imread(latest_file)
         f = plt.figure()
         ax = plt.gca()
@@ -1206,30 +1210,50 @@ def pitches_and_durations_to_lilypond_notation(pitches, durations, extras=None,
     return lilycomb
 
 
-def plot_pitches_and_durations(pitches, durations, extras=None,
+def plot_pitches_and_durations(pitches, durations,
+                               save_dir="plots",
+                               name_tag="plot_{}.ly",
+                               extras=None,
                                time_signatures=None,
                                key_signatures=None,
                                chord_annotations=None,
                                interval_figures=None,
                                interval_durations=None,
                                use_clefs=None):
-    # map midi pitches to lilypond ones... oy
-    voices = pitches_and_durations_to_lilypond_notation(pitches, durations, extras, key_signatures=key_signatures)
-    #plot_lilypond([voices[1]])
-    #plot_lilypond([voices[0]], [voices[-1]])
-    #plot_lilypond([voices[0]], [voices[-1]], own_staves=True)
-    # TODO: fix own_staves=False issues with conflicting time/key signatures
-    # raise an error
-    # down the line, fix accidentals on case by case basis :|
-    # add options for chord notations, and intervals for final analysis
-    # add grey notes (all possibles) as well to visualize the decoding?
-    plot_lilypond(voices, own_staves=True,
-                  time_signatures=time_signatures,
-                  key_signatures=key_signatures,
-                  chord_annotations=chord_annotations,
-                  interval_figures=interval_figures,
-                  interval_durations=interval_durations,
-                  use_clefs=use_clefs)
+    # list of list of list inputs
+    assert len(pitches) == len(durations)
+    try:
+        pitches[0][0][0]
+        durations[0][0][0]
+    except:
+        raise ValueError("pitches and durations should be list of list of list")
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+    for n, (pitches, durations) in enumerate(zip(pitches, durations)):
+        # map midi pitches to lilypond ones... oy
+        voices = pitches_and_durations_to_lilypond_notation(pitches, durations, extras, key_signatures=key_signatures)
+        #plot_lilypond([voices[1]])
+        #plot_lilypond([voices[0]], [voices[-1]])
+        #plot_lilypond([voices[0]], [voices[-1]], own_staves=True)
+        # TODO: fix own_staves=False issues with conflicting time/key signatures
+        # raise an error
+        # down the line, fix accidentals on case by case basis :|
+        # add options for chord notations, and intervals for final analysis
+        # add grey notes (all possibles) as well to visualize the decoding?
+        this_dir = os.getcwd()
+        #full_fpath = save_dir + os.sep + name_tag.format(n)
+        local_fpath = name_tag.format(n)
+        os.chdir(save_dir)
+        # do it this way because lilypond uses the local dir by default...
+        plot_lilypond(voices, own_staves=True,
+                      fpath=local_fpath,
+                      time_signatures=time_signatures,
+                      key_signatures=key_signatures,
+                      chord_annotations=chord_annotations,
+                      interval_figures=interval_figures,
+                      interval_durations=interval_durations,
+                      use_clefs=use_clefs)
+        os.chdir(this_dir)
 
 
 if __name__ == "__main__":
@@ -1272,7 +1296,7 @@ if __name__ == "__main__":
 
     # figure out plotting of tied notes
     # fix zoom
-    plot_pitches_and_durations(parts, durations,
+    plot_pitches_and_durations([parts], [durations],
                                interval_figures=interval_figures,
                                interval_durations=interval_durations,
                                use_clefs=clefs)
