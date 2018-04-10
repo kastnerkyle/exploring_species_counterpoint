@@ -6,7 +6,7 @@ import numpy as np
 import torch as th
 from torch.autograd import Variable
 
-window_p, window_l, p_map, l_map, all_p, all_l = two_voice_species1_wrap()
+window_p, window_l, p_map, l_map, all_p, all_l, all_i = two_voice_species1_wrap()
 
 l_inv_map = {v: k for k, v in l_map.items()}
 p_inv_map = {v: k for k, v in p_map.items()}
@@ -69,6 +69,7 @@ class MusicStateManager(object):
             lower += [np_st[ii, -1]]
         lower_midi_orig = [l_inv_map[li] for li in lower]
         upper_interval_orig = [p_inv_map[pi] for pi in upper]
+        # clip it? how is this getting so large?
         # 97 is the boundary for special start, end of sequence stuff
         lower_midi = [lm for lm in lower_midi_orig if lm < 97]
         lower_midi = np.array(lower_midi) + self.offset_value
@@ -84,7 +85,7 @@ class MusicStateManager(object):
         time_signature = "4/4"
         aok = analyze_two_voices(parts, durations, key_signature, time_signature,
                                  species="species1", cantus_firmus_voices=[1])
-        return aok[0]
+        return aok
 
 
 random_state = np.random.RandomState(9)
@@ -145,8 +146,13 @@ def get_trace(random_state):
                     min_dist = dist
             estate = np.array([p_map[min_poss], l_map[100], l_map[100], l_map[100]])
             full_seq = list(states) + [state, estate]
-            midi = mcts.state_manager.reconstruct_sequence(full_seq)
-            musical_check = mcts.state_manager.evaluate_sequence(midi)
+            try:
+                midi = mcts.state_manager.reconstruct_sequence(full_seq)
+                musical_check = mcts.state_manager.evaluate_sequence(midi)
+            except:
+                print("Error in midi or musical_check")
+                from IPython import embed; embed(); raise ValueError()
+
             break
     return states, mcts_probs, moves, midi, musical_check
 
@@ -158,7 +164,7 @@ if __name__ == "__main__":
 
     random_state = np.random.RandomState(1999)
     trace_data = []
-    for i in range(3):
+    for i in range(100):
         print(i)
         trace_random_state = np.random.RandomState(random_state.randint(1000000000))
         trace_results = get_trace(trace_random_state)

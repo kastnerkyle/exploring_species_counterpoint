@@ -8,15 +8,17 @@ def two_voice_species1_wrap():
     all_ex = fetch_two_voice_species1()
     # for now, just get info from 2 voice species 1
     #all_ex += fetch_three_voice_species1()
+    all_index = []
     all_tb = []
     all_lower_midi = []
     all_upper_midi = []
     all_lower_offset = []
     all_upper_offset = []
-    for ex in all_ex:
+    for ii, ex in enumerate(all_ex):
         # skip any "wrong" examples
         if not all(ex["answers"]):
             continue
+        all_index.append(ex["name"])
         nd = ex["notes_and_durations"]
         notes = [[ndii[0] for ndii in ndi] for ndi in nd]
         # durations not used in first species, leave it alone
@@ -69,7 +71,7 @@ def two_voice_species1_wrap():
     list_data = make_windows(all_tb, all_lower_offset)
     data_p = np.array([[tb_map[ldi] for ldi in ld[0]] for ld in list_data])
     data_l = np.array([[lower_map[ldi] for ldi in ld[1]] for ld in list_data])
-    return data_p, data_l, tb_map, lower_map, all_tb, all_lower_offset
+    return data_p, data_l, tb_map, lower_map, all_tb, all_lower_offset, all_index
 
 if __name__ == "__main__":
     two_voice_species1_wrap()

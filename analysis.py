@@ -310,17 +310,17 @@ intervals_map = {-28: "-M17",
                 -14: "-M9",
                 -13: "-m9",
                 -12: "-P8",
-                -11: "-m2",
-                -10: "-M2",
-                -9: "-m3",
-                -8: "-M3",
-                -7: "-P4",
+                -11: "-M7",
+                -10: "-m7",
+                -9: "-M6",
+                -8: "-m6",
+                -7: "-P5",
                 -6: "-a4",
-                -5: "-P5",
-                -4: "-m6",
-                -3: "-M6",
-                -2: "-m7",
-                -1: "-M7",
+                -5: "-P4",
+                -4: "-M3",
+                -3: "-m3",
+                -2: "-M2",
+                -1: "-m2",
                 0: "P1",
                 1: "m2",
                 2: "M2",
@@ -539,8 +539,18 @@ def next_step_rule(parts, durations, key_signature, time_signature, mode, timing
                     if msg is None:
                         msg = "next_step_rule: NONE, rest in voice"
                     continue
+                elif -int(voice_step) < min(intervals_map.keys()) or -int(voice_step) > max(intervals_map.keys()):
+                    mink = min(intervals_map.keys())
+                    maxk = max(intervals_map.keys())
+                    msg = "next_step_rule: FALSE, voice {} stepwise movement {}->{}, jump size {} outside known range {}:{} to {}:{}".format(voice_labels[n], note_sets[n][0], note_sets[n][1], -int(voice_step), mink, intervals_map[mink],
+                       maxk, intervals_map[maxk])
+                    voice_ok = False
                 else:
                     print("error in next step rule")
+                    print("this step {}".format(this_step))
+                    print("rule {}".format(rule))
+                    from IPython import embed; embed(); raise ValueError()
+                    raise ValueError("error in next step rule")
                     from IPython import embed; embed(); raise ValueError()
 
             if ignore_voices is not None and n in ignore_voices:
@@ -711,7 +721,9 @@ def bar_consonance_rule(parts, durations, key_signature, time_signature, mode, t
         for n in range(len(timings)):
             assert timings[n][idx] == timing_i
 
-        if timing_i == 0.:
+        if timing_i != 0.:
+            returns.append((None, "bar_consonance_rule: NONE, rule not applicable on beat {}".format(timing_i)))
+        elif timing_i == 0.:
             if ti in harmonic_intervals or ti in neg_harmonic_intervals:
                 returns.append((True, "bar_consonance_rule: TRUE, harmonic interval {} allowed on downbeat".format(ti)))
             else:
@@ -721,22 +733,6 @@ def bar_consonance_rule(parts, durations, key_signature, time_signature, mode, t
                     if ni in harmonic_intervals or ni in neg_harmonic_intervals:
                         if int(ni[-1]) == 0 or int(ti[-1]) == 0:
                             returns.append((False, "bar_consonance_rule: FALSE, suspension outside range"))
-                        elif ti[0] == "-" or ni[0] == "-":
-                            # remap negative to positive equivalent, then check
-                            remap = {"-m7": "M2",
-                                     "-M7": "m2"}
-                            old_ti = ti
-                            old_ni = ni
-                            if ti[0] == "-":
-                                ti = remap[ti]
-                            if ni[0] == "-":
-                                ni = remap[ni]
-                            if int(ti[-1]) - int(ni[-1]) == 1:
-                                returns.append((True, "bar_consonance_rule: TRUE, negative non-consonant interval {} resolves downward to {}".format(old_ti, old_ni)))
-                            elif int(ti[-1]) - int(ni[-1]) == -1:
-                                returns.append((True, "bar_consonance_rule: TRUE, negative non-consonant interval {} resolves upward to {}".format(old_ti, old_ni)))
-                            else:
-                                returns.append((False, "bar_consonance_rule: FALSE, negative non-consonant interval {} not resolved, goes to {}".format(old_ti, old_ni)))
                         else:
                             if int(ti[-1]) - int(ni[-1]) == 1:
                                 returns.append((True, "bar_consonance_rule: TRUE, non-consonant interval {} resolves downward to {}".format(ti, ni)))
@@ -748,8 +744,6 @@ def bar_consonance_rule(parts, durations, key_signature, time_signature, mode, t
                         returns.append((False, "bar_consonance_rule: FALSE, non-consonant interval {} disallowed on downbeat".format(ti)))
                 else:
                     returns.append((False, "bar_consonance_rule: FALSE, non-consonant interval {} disallowed on downbeat".format(ti)))
-        elif timing_i != 0.:
-            returns.append((None, "bar_consonance_rule: NONE, rule not applicable on beat {}".format(timing_i)))
         else:
             raise ValueError("bar_consonance_rule: shouldn't get here")
     return returns
@@ -1262,6 +1256,7 @@ def test_two_voice_species4():
         equal = [aa == a for aa, a in zip(all_answers, answers)]
         if not all(equal):
             print("Test FAIL for note sequence {}".format(fig_name))
+            from IPython import embed; embed(); raise ValueError()
         else:
             print("Test passed for note sequence {}".format(fig_name))
 
