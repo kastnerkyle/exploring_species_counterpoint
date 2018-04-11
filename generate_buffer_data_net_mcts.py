@@ -71,10 +71,10 @@ if __name__ == "__main__":
     import gzip
     import time
 
-    save_path = "current_data_buffer.pkl.gz"
-    tmp_save_path = "current_data_buffer_tmp.pkl.gz"
-    lockfile = "lock.lock"
-    boundary = 5000
+    from shared_config import save_path, tmp_save_path, lockfile, model_path
+    from shared_utils import creation_date
+
+    boundary = 1000
     deque_max_size = 100000
     data_buffer = deque(maxlen=deque_max_size)
 
@@ -83,14 +83,22 @@ if __name__ == "__main__":
         with gzip.open(save_path, "rb") as f:
             old_data = pickle.load(f)
         data_buffer.extend(old_data)
-        print("Loaded {} datapoints from previous save buffer".format(len(data_buffer)))
+        print("Loaded {} datapoints from previous save buffer {}".format(len(data_buffer), save_path))
         rewards = [od[-1] for od in old_data]
         seed = int(10000 * sum([abs(r) for r in rewards])) % 223145
         print("Setting new seed {}".format(seed))
 
     random_state = np.random.RandomState(seed)
     n_traces = 0
+
+    last_param_info = None
     while True:
+        ncd = creation_date(model_path)
+        if last_param_info is None or ncd != last_param_info:
+            print("Detected new model parameters in {}, reloading".format(model_path))
+            pv.load_state_dict(th.load(model_path, map_location=lambda storage, loc: storage))
+
+        start_time = time.time()
         trace_data = []
         n_traces += 1
         i = 1
@@ -104,6 +112,7 @@ if __name__ == "__main__":
             i += 1
             if ss > boundary:
                 break
+        stop_time = time.time()
 
         try:
             # this hackery mainly to avoid empty sequence edge cases
@@ -142,12 +151,13 @@ if __name__ == "__main__":
 
         if os.path.exists(lockfile):
             while True:
+                print("Buffer lockfile {} found, sleeping...".format(lockfile))
                 time.sleep(2)
                 if not os.path.exists(lockfile):
                     break
 
         shutil.move(tmp_save_path, save_path)
-        print("Wrote buffer data of length {} to {}".format(len(data_buffer), save_path))
+        print("Wrote buffer data of length {} to {}, time to generate {} seconds".format(len(data_buffer), save_path, int(stop_time - start_time)))
 
         # plot the best and worst output trace
         argmax = [n for n, sr in enumerate(reward) if sr == max(reward)][0]
