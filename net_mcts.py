@@ -36,8 +36,27 @@ class NetMCTS(object):
         self.state_manager = state_manager
         self.random_state = random_state
 
+    def make_full_sequence(self, partial_state_seq):
+        # Hack to end on octave, since unison currently disallowed
+        min_dist = np.inf
+        min_poss = None
+        last_state = partial_state_seq[-1]
+        for poss in [-8, 8, 16]:
+            dist = abs(poss - self.state_manager.original_inv_map[last_state[0]])
+            if dist < min_dist:
+                min_poss = poss
+                min_dist = dist
+        # map from "real space" to policy space
+        final_move = self.state_manager.valid_action_inv_remapper[self.state_manager.valid_action_map[min_poss]]
+        # add a bunch of eos for guide trace
+        last_l = self.state_manager.guide_map[100]
+        estate = np.array([final_move, last_l, last_l, last_l])
+        full_seq = list(partial_state_seq) + [estate]
+        return full_seq
+
     def playout(self, state):
         node = self.root
+        states = []
         while True:
             if node.is_leaf():
                 winner, end = self.state_manager.finished(state)
@@ -46,9 +65,11 @@ class NetMCTS(object):
                     # make this part "env aware"? check actions?
                     node.expand(actions_and_probs)
                 if end:
-                    # evaluate music to see if it matched all rules
-                    musical = True
-                    if musical:
+                    full_seq = self.make_full_sequence(list(states))
+                    midi = self.state_manager.reconstruct_sequence(full_seq)
+                    local_musical_check = self.state_manager.evaluate_sequence(midi, minimal=True)
+
+                    if local_musical_check[0]:
                         value = 1.
                     else:
                         value = -1.
@@ -58,6 +79,7 @@ class NetMCTS(object):
                 # greedy select
                 action, node = node.get_best(self.c_puct)
                 state = self.state_manager.next_state(state, action)
+                states.append(state)
 
     def get_move_probs(self, state, temp=1E-3):
         mgr = copy.deepcopy(self.state_manager)

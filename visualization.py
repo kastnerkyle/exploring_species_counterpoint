@@ -857,6 +857,7 @@ def plot_lilypond(upper_voices, lower_voices=None, own_staves=False,
                   interval_figures=None,
                   interval_durations=None,
                   use_clefs=None,
+                  make_pdf=False,
                   fpath="tmp.ly",
                   title="Tmp", composer="Tmperstein", tagline="Copyright:?",
                   show=False,
@@ -1030,11 +1031,12 @@ tagline = "{}"
         f.write(final_ly)
 
     # also make the pdf?
-    pe("lilypond {}".format(fpath))
-    pe("lilypond -fpng {}".format(fpath))
+    if make_pdf:
+        pe("lilypond {}".format(fpath))
     if show:
         import matplotlib.pyplot as plt
         import matplotlib.image as mpimg
+        pe("lilypond -fpng {}".format(fpath))
 
         if len(fpath.split(os.sep)) == 1:
             flist = os.listdir(os.getcwd())
@@ -1213,6 +1215,7 @@ def pitches_and_durations_to_lilypond_notation(pitches, durations, extras=None,
 def plot_pitches_and_durations(pitches, durations,
                                save_dir="plots",
                                name_tag="plot_{}.ly",
+                               make_pdf=False,
                                extras=None,
                                time_signatures=None,
                                key_signatures=None,
@@ -1247,6 +1250,7 @@ def plot_pitches_and_durations(pitches, durations,
         # do it this way because lilypond uses the local dir by default...
         plot_lilypond(voices, own_staves=True,
                       fpath=local_fpath,
+                      make_pdf=make_pdf,
                       time_signatures=time_signatures,
                       key_signatures=key_signatures,
                       chord_annotations=chord_annotations,

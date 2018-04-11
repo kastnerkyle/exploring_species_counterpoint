@@ -912,6 +912,23 @@ def sequence_step_rule(parts, durations, key_signature, time_signature, mode, ti
             from IPython import embed; embed(); raise ValueError()
     return returns
 
+two_voice_species1_minimal_rules_map = OrderedDict()
+two_voice_species1_minimal_rules_map["next_step_rule"] = next_step_rule
+two_voice_species1_minimal_rules_map["parallel_rule"] = parallel_rule
+two_voice_species1_minimal_rules_map["bar_consonance_rule"] = bar_consonance_rule
+
+def check_two_voice_species1_minimal_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+    res = [two_voice_species1_minimal_rules_map[arm](parts, durations, key_signature, time_signature, mode, timings, ignore_voices) for arm in two_voice_species1_minimal_rules_map.keys()]
+
+    global_check = True
+    for r in res:
+        rr = [True if ri[0] is True or ri[0] is None else False for ri in r]
+        if all(rr):
+            pass
+        else:
+            global_check = False
+    return (global_check, res)
+
 two_voice_species1_rules_map = OrderedDict()
 two_voice_species1_rules_map["key_start_rule"] = key_start_rule
 two_voice_species1_rules_map["bar_consonance_rule"] = bar_consonance_rule
@@ -1046,7 +1063,9 @@ def analyze_two_voices(parts, durations, key_signature_str, time_signature_str, 
     timings = estimate_timing(parts, durations, time_signature)
 
     ignore_voices = cantus_firmus_voices
-    if species == "species1":
+    if species == "species1_minimal":
+        r = check_two_voice_species1_minimal_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
+    elif species == "species1":
         r = check_two_voice_species1_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
     elif species == "species2":
         r = check_two_voice_species2_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
