@@ -48,7 +48,7 @@ if __name__ == "__main__":
         if not os.path.exists(save_path):
             while True:
                 print("No buffer data found at {}, sleeping...".format(save_path))
-                time.sleep(2)
+                time.sleep(10)
                 if os.path.exists(save_path):
                     break
 

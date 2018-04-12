@@ -97,6 +97,7 @@ if __name__ == "__main__":
         if last_param_info is None or ncd != last_param_info:
             print("Detected new model parameters in {}, reloading".format(model_path))
             pv.load_state_dict(th.load(model_path, map_location=lambda storage, loc: storage))
+            last_param_info = ncd
 
         start_time = time.time()
         trace_data = []
@@ -152,7 +153,7 @@ if __name__ == "__main__":
         if os.path.exists(lockfile):
             while True:
                 print("Buffer lockfile {} found, sleeping...".format(lockfile))
-                time.sleep(2)
+                time.sleep(10)
                 if not os.path.exists(lockfile):
                     break
 
