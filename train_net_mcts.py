@@ -102,8 +102,8 @@ if __name__ == "__main__":
 
             policy_log_probs, value_est = pv(p_, l_)
 
-            v_loss = th.sum(((value_est - gt_v) ** 2) / gt_po.size()[0])
-            po_loss = -th.sum((gt_po * policy_log_probs) / gt_po.size()[0])
+            v_loss = th.mean(((value_est - gt_v) ** 2))
+            po_loss = -th.mean((gt_po * policy_log_probs))
 
             loss = po_loss + v_loss
             comb_loss = loss.cpu().data.numpy()[0]
