@@ -80,11 +80,12 @@ if __name__ == "__main__":
         tot = 0
         for step in range(training_batches):
             # be sure at least 12.5% are positives
-            mb_ind = training_random_state.choice(indices, int(batch_size * .75))
-            if len(indices_target_pos) > 0:
-                neg_mb_ind = training_random_state.choice(indices_target_neg, 1 + batch_size // 8)
-                pos_mb_ind = training_random_state.choice(indices_target_pos, 1 + batch_size // 8)
-                mb_ind = np.concatenate((mb_ind, neg_mb_ind, pos_mb_ind))
+            if len(indices_target_pos) > 0 and len(indices_target_neg) > 0:
+                neg_mb_ind = training_random_state.choice(indices_target_neg, batch_size // 2)
+                pos_mb_ind = training_random_state.choice(indices_target_pos, batch_size // 2)
+                mb_ind = np.concatenate((neg_mb_ind, pos_mb_ind))
+            else:
+                mb_ind = training_random_state.choice(indices, int(batch_size))
             training_random_state.shuffle(mb_ind)
             mb_states = train_states[mb_ind]
             mb_probs = train_mcts_probs[mb_ind]
@@ -103,7 +104,7 @@ if __name__ == "__main__":
             policy_log_probs, value_est = pv(p_, l_)
 
             v_loss = th.mean(((value_est - gt_v) ** 2))
-            po_loss = -th.mean((gt_po * policy_log_probs))
+            po_loss = -th.mean(th.sum(gt_po * policy_log_probs, dim=1))
 
             loss = po_loss + v_loss
             comb_loss = loss.cpu().data.numpy()[0]

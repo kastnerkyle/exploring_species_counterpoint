@@ -5,5 +5,5 @@ while true
 do
     echo "run.sh bash subprocesses status:"
     echo $(ps aux | grep $USER | grep runner.sh)
-    sleep 10
+    sleep 30
 done
