@@ -384,8 +384,8 @@ if __name__ == "__main__":
     all_parts = []
     all_durations = []
     mcts_random = np.random.RandomState(1110)
-    for guide_idx in [0, 1]:
-    #for guide_idx in range(len(all_l)):
+    #for guide_idx in [0, 1]:
+    for guide_idx in range(len(all_l)):
         tvsp1m = TwoVoiceSpecies1Manager(guide_idx)
         mcts = MCTS(tvsp1m, n_playout=1000, random_state=mcts_random)
         resets = 0
