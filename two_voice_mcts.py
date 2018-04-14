@@ -54,22 +54,30 @@ class TwoVoiceSpecies1Manager(object):
             disallowed = []
             if 3 in s0:
                 disallowed.append(4)
+                disallowed.append(9)
                 disallowed.append(16)
             if 4 in s0:
                 disallowed.append(3)
+                disallowed.append(8)
                 disallowed.append(15)
 
             if 15 in s0:
                 disallowed.append(4)
+                disallowed.append(9)
                 disallowed.append(16)
             if 16 in s0:
                 disallowed.append(3)
+                disallowed.append(8)
                 disallowed.append(15)
 
             if 8 in s0:
+                disallowed.append(4)
                 disallowed.append(9)
+                disallowed.append(16)
             if 9 in s0:
+                disallowed.append(3)
                 disallowed.append(8)
+                disallowed.append(15)
             disallowed_actions = [p_map[d] for d in disallowed]
 
             va = [vai for vai in va if vai not in disallowed_actions]
