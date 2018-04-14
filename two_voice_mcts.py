@@ -99,13 +99,18 @@ class TwoVoiceSpecies1Manager(object):
         # range score
         # note diversity
         # interval diversity
+        # repetition of notes
+        # repetition of intervals
+        # perfect intervals in a row
         # distance from center of max note
         # distance from center of max interval
         # whether the peak is a unique note or repeated
         smooth_s = 1. / np.sum(np.abs(np.diff(top)))
         range_s = 1. / float(np.max([np.max(top) - np.min(top), 12]))
-        note_p = -1. / len(set(top))
-        interval_p = -1./ len(set(s0))
+        note_p = 1 - 1. / len(set(top))
+        #interval_p = 1. - 1./ len(set(s0))
+        note_rep = 1. / (.5 + len(np.where(np.diff(top) == 0.)[0]))
+        #interval_rep = 1. / (.5 + len(np.where(np.diff(s0) == 0.)[0]))
         farthest_from_center_interval = np.where(s0 == np.max(s0))[0]
         fci = np.argmax(np.abs(farthest_from_center_interval - len(s1) / 2.))
         fci_argmax = farthest_from_center_interval[fci]
@@ -114,10 +119,19 @@ class TwoVoiceSpecies1Manager(object):
         fcn = np.argmax(np.abs(farthest_from_center_note - len(s1) / 2.))
         fcn_argmax = farthest_from_center_note[fcn]
 
+        """
+        perfects_idx = np.where((s0 == 0.) | (s0 == 7.) | (s0 == 12.))[0]
+        lni = np.array([i for i in range(len(s0)) if i + 1 in perfects_idx])
+        rni = np.array([i for i in range(len(s0)) if i - 1 in perfects_idx])
+        dbl_perf = len(np.where((lni[None] - perfects_idx[:, None]).ravel() == 0.)[0])
+        dbl_perf += len(np.where((rni[None] - perfects_idx[:, None]).ravel() == 0.)[0])
+        perfects = 1. / (dbl_perf + 1.)
+        """
+
         center_note_s = 1. if abs(len(s1) / 2. - fcn) < 3 else 0.
         center_interval_s = 1. if abs(len(s1) / 2. - fci) < 3 else 0.
         unique_peak = 1. if len(np.where(top == np.max(top))[0]) == 1 and center_note_s > 0 else 0.
-        return smooth_s + range_s + note_p + interval_p + center_interval_s + center_note_s + unique_peak
+        return smooth_s + range_s + note_p + note_rep + center_interval_s + center_note_s + unique_peak
 
     def rollout_from_state(self, state):
         s = state
@@ -370,8 +384,8 @@ if __name__ == "__main__":
     all_parts = []
     all_durations = []
     mcts_random = np.random.RandomState(1110)
-    #for guide_idx in [0]:
-    for guide_idx in range(len(all_l)):
+    for guide_idx in [0, 1]:
+    #for guide_idx in range(len(all_l)):
         tvsp1m = TwoVoiceSpecies1Manager(guide_idx)
         mcts = MCTS(tvsp1m, n_playout=1000, random_state=mcts_random)
         resets = 0
