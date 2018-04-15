@@ -66,12 +66,12 @@ class ThreeVoiceSpecies1Manager(object):
             va = comb_acts
             return va
         else:
-            # keep the jumps within a 4th
+            # keep the jumps within a 4th on top voice
             va_u = [u_map[k] for k in sorted(u_map.keys()) if abs(k - state[0][-1]) <= 4 and k >= 0]
-            va_m = [m_map[k] for k in sorted(m_map.keys()) if abs(k - state[1][-1]) <= 4 and k >= 0]
+            va_m = [m_map[k] for k in sorted(m_map.keys()) if k >= 0]
             combs = [(u, m) for u in va_u for m in va_m]
             # disallow intervals too close together (no m/M2 clashes)
-            combs = [c for c in combs if abs(c[0] - c[1]) > 2]
+            combs = [c for c in combs if abs(c[0] - c[1]) > 2 and c[0] > c[1]]
             # check that it is an option
             comb_acts = [j_acts_inv_map[c] for c in combs if c in j_acts_inv_map]
             va = comb_acts
@@ -110,7 +110,7 @@ class ThreeVoiceSpecies1Manager(object):
         smooth_s0 = 1. / np.sum(np.abs(np.diff(top)))
         smooth_s1 = 1. / np.sum(np.abs(np.diff(mid)))
         unique_max = 1. / float(len(np.where(top == np.max(top))[0]))
-        return 10. * smooth_s0 + smooth_s1 + 10. * unique_max
+        return 20. * smooth_s0 + smooth_s1 + 2. * unique_max
 
     def rollout_from_state(self, state):
         s = state
@@ -428,6 +428,13 @@ if __name__ == "__main__":
     key_signature = "C"
     time_signature = "4/4"
     clefs = ["treble", "bass"]
+    # now dump samples
+    pitches_and_durations_to_pretty_midi(all_parts, all_durations,
+                                         save_dir="three_voice_mcts_samples",
+                                         name_tag="three_voice_mcts_sample_{}.mid",
+                                         default_quarter_length=240,
+                                         voice_params="piano")
+
     plot_pitches_and_durations(all_parts, all_durations,
                                save_dir="three_voice_mcts_plots",
                                name_tag="three_voice_mcts_plot_{}.ly")
@@ -435,12 +442,6 @@ if __name__ == "__main__":
                                #interval_durations=interval_durations,
                                #use_clefs=clefs)
 
-    # now dump samples
-    pitches_and_durations_to_pretty_midi(all_parts, all_durations,
-                                         save_dir="three_voice_mcts_samples",
-                                         name_tag="three_voice_mcts_sample_{}.mid",
-                                         default_quarter_length=240,
-                                         voice_params="piano")
     # add caching here?
     # minimal check during rollout
     from IPython import embed; embed(); raise ValueError()
