@@ -11,89 +11,96 @@
 
 import numpy as np
 import copy
-from dataset_wrap import two_voice_species1_wrap
-from analysis import analyze_two_voices
+from dataset_wrap import three_voice_species1_wrap
+from analysis import analyze_three_voices
 
-window_p, window_l, p_map, l_map, all_p, all_l, all_i = two_voice_species1_wrap()
-p_inv_map = {v: k for k, v in p_map.items()}
-# get rid of the awkward one?
-all_l = [l for l in all_l if l[1] == 0]
+all_l, all_c_set, u_map, m_map, um_map, l_map, all_i = three_voice_species1_wrap()
+u_inv_map = {v: k for k, v in u_map.items()}
+m_inv_map = {v: k for k, v in m_map.items()}
+um_inv_map = {v: k for k, v in um_map.items()}
+l_inv_map = {v: k for k, v in l_map.items()}
+j_map = {(k1, k2): (u_map[k1], m_map[k2]) for k1 in sorted(u_map.keys()) for k2 in sorted(m_map.keys())}
+j_map = {k: v for k, v in j_map.items() if k[0] >= k[1]}
+j_map = {k: v for k, v in j_map.items() if k[0] != 0 and k[1] != 0}
+# don't constrain to only groupings found in the dataset
+#j_map = {k: v for k, v in j_map.items() if k in all_c_set}
 
-class TwoVoiceSpecies1Manager(object):
+j_inv_map = {v: k for k, v in j_map.items()}
+j_acts_map = {k: v for k, v in enumerate(sorted(j_map.keys()))}
+j_acts_inv_map = {v: k for k, v in j_acts_map.items()}
+
+class ThreeVoiceSpecies1Manager(object):
     def __init__(self, guide_index, default_mode="C", rollout_limit=1000):
         self.default_mode = "C"
         self.offset_value = 60
-        self.guide_trace = all_l[guide_index][1:-1]
+        self.guide_trace = all_l[guide_index]
 
         self.random_state = np.random.RandomState(1999)
         self.rollout_limit = rollout_limit
 
     def get_next_state(self, state, action):
-        interval = p_inv_map[action]
-        return [state[0] + [interval], state[1]]
+        tup_act = j_acts_map[action]
+        new_state = [state[0] + [tup_act[0]], state[1] + [tup_act[1]], state[2]]
+        return new_state
 
     def get_action_space(self):
-        return list(range(len({p for p in p_map if p < 97})))
+        return list(range(len(j_acts_map.keys())))
 
     def get_valid_actions(self, state):
-        if len(state[0]) > 0:
-            s0 = np.array(state[0])
-            s1 = np.array(state[1])
-            # only allow actions within a jump of a 4th (5)
-            # only allow harmonizations above - no voice crossing
-            if len(state[0]) >= (len(state[1]) - 2):
-                # allow unison on the last notes
-                va = [p_map[k] for k in sorted(p_map.keys()) if abs(k - state[0][-1]) <= 5 and k >= 0]
-            else:
-                va = [p_map[k] for k in sorted(p_map.keys()) if abs(k - state[0][-1]) <= 5 and k > 0]
+        s0 = np.array(state[0])
+        s1 = np.array(state[1])
+        s2 = np.array(state[2])
 
-            # extra contingencies
-            # disallow M3/m3 confusions
-            # disallow m6/M6 confusions
-            # disallow same on 15/16 (m3/M3)
-            disallowed = []
-            if 3 in s0:
-                disallowed.append(4)
-                disallowed.append(9)
-                disallowed.append(16)
-            if 4 in s0:
-                disallowed.append(3)
-                disallowed.append(8)
-                disallowed.append(15)
+        mp = [3, 8, 15]
+        Mp = [4, 9, 16]
 
-            if 15 in s0:
-                disallowed.append(4)
-                disallowed.append(9)
-                disallowed.append(16)
-            if 16 in s0:
-                disallowed.append(3)
-                disallowed.append(8)
-                disallowed.append(15)
-
-            if 8 in s0:
-                disallowed.append(4)
-                disallowed.append(9)
-                disallowed.append(16)
-            if 9 in s0:
-                disallowed.append(3)
-                disallowed.append(8)
-                disallowed.append(15)
-            disallowed_actions = [p_map[d] for d in disallowed]
-
-            va = [vai for vai in va if vai not in disallowed_actions]
-            if len(va) == 0:
-                print("Edge case, 0 valid actions...")
-                from IPython import embed; embed(); raise ValueError()
+        if len(state[0]) == 0:
+            # for first note, keep it pretty open
+            va_u = [u_map[k] for k in sorted(u_map.keys()) if k >= 0]
+            va_m = [m_map[k] for k in sorted(m_map.keys()) if k >= 0]
+            combs = [(u, m) for u in va_u for m in va_m]
+            # disallow intervals too close together (no m/M2 clashes)
+            combs = [c for c in combs if abs(c[0] - c[1]) > 2]
+            # make sure it's a viable action
+            comb_acts = [j_acts_inv_map[c] for c in combs if c in j_acts_inv_map]
+            va = comb_acts
             return va
         else:
-            # could constrain the start much more, but leave it for now
-            return [p_map[k] for k in sorted(p_map.keys()) if k < 97 and k >= 0]
+            # keep the jumps within a 4th
+            va_u = [u_map[k] for k in sorted(u_map.keys()) if abs(k - state[0][-1]) <= 4 and k >= 0]
+            va_m = [m_map[k] for k in sorted(m_map.keys()) if abs(k - state[1][-1]) <= 4 and k >= 0]
+            combs = [(u, m) for u in va_u for m in va_m]
+            # disallow intervals too close together (no m/M2 clashes)
+            combs = [c for c in combs if abs(c[0] - c[1]) > 2]
+            # once commited to major/minor tonality, stick with it?
+            disallowed = []
+            combs = [c for c in combs if c[0] not in disallowed and c[1] not in disallowed]
+            # check that it is an option
+            comb_acts = [j_acts_inv_map[c] for c in combs if c in j_acts_inv_map]
+            va = comb_acts
+            if len(va) == 0:
+                # no actions, allow leaps
+                va_u = [u_map[k] for k in sorted(u_map.keys()) if k >= 0]
+                va_m = [m_map[k] for k in sorted(m_map.keys()) if k >= 0]
+                combs = [(u, m) for u in va_u for m in va_m]
+
+                # avoid m2/M2 clases
+                combs = [c for c in combs if abs(c[0] - c[1]) > 2]
+                # stick to chosen tonality
+                combs = [c for c in combs if c[0] not in disallowed and c[1] not in disallowed]
+                # make sure it is a valid action
+                comb_acts = [j_acts_inv_map[c] for c in combs if c in j_acts_inv_map]
+                if len(comb_acts) == 0:
+                    print("Edge case, STILL no valid actions...")
+                    from IPython import embed; embed(); raise ValueError()
+                va = comb_acts
+            return va
 
     def get_init_state(self):
-        # need to inspect the others...
         top = []
+        mid = []
         bot = self.guide_trace
-        return copy.deepcopy([top, bot])
+        return copy.deepcopy([top, mid, bot])
 
     def _rollout_fn(self, state):
         return self.random_state.choice(self.get_valid_actions(state))
@@ -101,45 +108,14 @@ class TwoVoiceSpecies1Manager(object):
     def _score(self, state):
         s0 = np.array(state[0])
         s1 = np.array(state[1])
-        bot = s1 + self.offset_value
+        s2 = np.array(state[2])
+        bot = s2 + self.offset_value
+        mid = bot[:len(s1)] + s1
         top = bot[:len(s0)] + s0
-        # smoothness score
-        # range score
-        # note diversity
-        # interval diversity
-        # repetition of notes
-        # repetition of intervals
-        # perfect intervals in a row
-        # distance from center of max note
-        # distance from center of max interval
-        # whether the peak is a unique note or repeated
-        smooth_s = 1. / np.sum(np.abs(np.diff(top)))
-        range_s = 1. / float(np.max([np.max(top) - np.min(top), 12]))
-        note_p = 1 - 1. / len(set(top))
-        #interval_p = 1. - 1./ len(set(s0))
-        note_rep = 1. / (.5 + len(np.where(np.diff(top) == 0.)[0]))
-        #interval_rep = 1. / (.5 + len(np.where(np.diff(s0) == 0.)[0]))
-        farthest_from_center_interval = np.where(s0 == np.max(s0))[0]
-        fci = np.argmax(np.abs(farthest_from_center_interval - len(s1) / 2.))
-        fci_argmax = farthest_from_center_interval[fci]
-
-        farthest_from_center_note = np.where(top == np.max(top))[0]
-        fcn = np.argmax(np.abs(farthest_from_center_note - len(s1) / 2.))
-        fcn_argmax = farthest_from_center_note[fcn]
-
-        """
-        perfects_idx = np.where((s0 == 0.) | (s0 == 7.) | (s0 == 12.))[0]
-        lni = np.array([i for i in range(len(s0)) if i + 1 in perfects_idx])
-        rni = np.array([i for i in range(len(s0)) if i - 1 in perfects_idx])
-        dbl_perf = len(np.where((lni[None] - perfects_idx[:, None]).ravel() == 0.)[0])
-        dbl_perf += len(np.where((rni[None] - perfects_idx[:, None]).ravel() == 0.)[0])
-        perfects = 1. / (dbl_perf + 1.)
-        """
-
-        center_note_s = 1. if abs(len(s1) / 2. - fcn) < 3 else 0.
-        center_interval_s = 1. if abs(len(s1) / 2. - fci) < 3 else 0.
-        unique_peak = 1. if len(np.where(top == np.max(top))[0]) == 1 and center_note_s > 0 else 0.
-        return smooth_s + range_s + note_p + note_rep + center_interval_s + center_note_s + unique_peak
+        smooth_s0 = 1. / np.sum(np.abs(np.diff(top)))
+        smooth_s1 = 1. / np.sum(np.abs(np.diff(mid)))
+        unique_max = 1. / float(len(np.where(top == np.max(top))[0]))
+        return 10. * smooth_s0 + smooth_s1 + 10. * unique_max
 
     def rollout_from_state(self, state):
         s = state
@@ -148,7 +124,7 @@ class TwoVoiceSpecies1Manager(object):
             if w == -1:
                 return 0.
             elif w == 0:
-                return -1
+                return -1.
             else:
                 return self._score(s)
 
@@ -162,7 +138,7 @@ class TwoVoiceSpecies1Manager(object):
                 if w == -1:
                     return 0.
                 elif w == 0:
-                    return -1
+                    return -1.
                 else:
                     return self._score(s)
 
@@ -170,49 +146,43 @@ class TwoVoiceSpecies1Manager(object):
                 return 0.
 
     def is_finished(self, state):
-        orig_len = len(state[0])
-        if orig_len == 0:
-            # nothing has happened yet
+        if len(state[0]) != len(state[1]):
+            raise ValueError("Something bad in is_finished")
+
+        if len(state[0]) == 0:
+            # nothing happened yet
             return -1, False
 
-        # do quick hand check for key start to speed it up
-        if state[0][0] not in [0, 12]:
-            return 0, True
-
-        # if the only thing so far is the first note, and we passed that check
-        # it's incomplete
-        if orig_len == 1:
+        # only grade it at the end?
+        if len(state[0]) != len(state[2]):
             return -1, False
 
-        # if its at the end, finish on an octave fifth or unison
-        if orig_len == len(state[1]):
-            if state[0][-1] not in [0, 12]:
-                return 0, True
-
-        ns0 = state[0] + [0] * (len(state[1]) - orig_len)
+        ns0 = state[0] + [0] * (len(state[2]) - len(state[0]))
+        ns1 = state[1] + [0] * (len(state[2]) - len(state[1]))
         # the state to check
-        s = [ns0, state[1]]
+        s = [ns0, ns1, state[2]]
 
         s = np.array(s)
-        s[1, :] += self.offset_value
-        s[0, :] += s[1, :]
+        s[2, :] += self.offset_value
+        s[0, :] += s[2, :]
+        s[1, :] += s[2, :]
 
         parts = s
         durations = [['4'] * len(p) for p in parts]
         key_signature = "C"
         time_signature = "4/4"
-        # add caching here?
         # minimal check during rollout
-        aok = analyze_two_voices(parts, durations, key_signature, time_signature,
-                                 species="species1_minimal", cantus_firmus_voices=[1])
+        aok = analyze_three_voices(parts, durations, key_signature, time_signature,
+                                   species="species1_minimal", cantus_firmus_voices=[1])
+
         if len(aok[1]["False"]) > 0:
             first_error = aok[1]["False"][0]
         else:
             first_error = np.inf
 
-        if orig_len < len(state[1]):
+        if len(state[0]) < len(state[2]):
             # error is out of our control (in the padded notes)
-            if first_error > (orig_len - 1):
+            if first_error > (len(state[0]) - 1):
                 return -1, False
             else:
                 # made a mistake
@@ -351,6 +321,7 @@ class MCTS(object):
         maxes = np.max(act_probs)
         opts = np.where(act_probs == maxes)[0]
         if len(opts) > 1:
+            # choose the one with the highest win score if equal?
             # if 2 options are *exactly* equal, just choose 1 at random
             self.random_state.shuffle(opts)
         act = opts[0]
@@ -392,32 +363,38 @@ if __name__ == "__main__":
     all_parts = []
     all_durations = []
     mcts_random = np.random.RandomState(1110)
-    #for guide_idx in [0, 1]:
+    #for guide_idx in [0]:
     for guide_idx in range(len(all_l)):
-        tvsp1m = TwoVoiceSpecies1Manager(guide_idx)
+        tvsp1m = ThreeVoiceSpecies1Manager(guide_idx)
         mcts = MCTS(tvsp1m, n_playout=1000, random_state=mcts_random)
         resets = 0
         n_valid_samples = 0
         valid_state_traces = []
         temp = 1.
         noise = True
+        exact = True
         while True:
             if n_valid_samples >= 1:
                 print("Got a valid sample")
                 break
             resets += 1
-            if resets > 30:
+            if resets > 10:
                 temp = 1E-3
                 noise = False
+            elif resets > 15:
+                exact = True
             state = mcts.state_manager.get_init_state()
             winner, end = mcts.state_manager.is_finished(state)
             states = [state]
+
             while True:
                 if not end:
                     print("guide {}, step {}, resets {}".format(guide_idx, len(states), resets))
                     #print(state)
-                    #a, ap = mcts.sample_action(state, temp=temp, add_noise=noise)
-                    a, ap = mcts.get_action(state)
+                    if not exact:
+                        a, ap = mcts.sample_action(state, temp=temp, add_noise=noise)
+                    else:
+                        a, ap = mcts.get_action(state)
                     for i in mcts.root.children_.keys():
                         print(i, mcts.root.children_[i].__dict__)
                         print("")
@@ -429,7 +406,7 @@ if __name__ == "__main__":
                 else:
                     mcts.reconstruct_tree()
                     print(state)
-                    if len(states) > 1 and len(states[-1][0]) == len(states[-1][1]):
+                    if len(states) > 1 and len(states[-1][0]) == len(states[-1][2]):
                         print("Got to the end")
                         n_valid_samples += 1
                         valid_state_traces.append(states[-1])
@@ -441,9 +418,11 @@ if __name__ == "__main__":
         s = valid_state_traces[0]
         s0 = np.array(s[0])
         s1 = np.array(s[1])
-        bot = s1 + mcts.state_manager.offset_value
+        s2 = np.array(s[2])
+        bot = s2 + mcts.state_manager.offset_value
+        mid = bot + s1
         top = bot + s0
-        parts = [list(top), list(bot)]
+        parts = [list(top), list(mid), list(bot)]
         durations = [['4'] * len(p) for p in parts]
         durations = [[int(di) for di in d] for d in durations]
         interval_figures = intervals_from_midi(parts, durations)
@@ -455,16 +434,16 @@ if __name__ == "__main__":
     time_signature = "4/4"
     clefs = ["treble", "bass"]
     plot_pitches_and_durations(all_parts, all_durations,
-                               save_dir="two_voice_mcts_plots",
-                               name_tag="two_voice_mcts_plot_{}.ly")
+                               save_dir="three_voice_mcts_plots",
+                               name_tag="three_voice_mcts_plot_{}.ly")
                                #interval_figures=interval_figures,
                                #interval_durations=interval_durations,
                                #use_clefs=clefs)
 
     # now dump samples
     pitches_and_durations_to_pretty_midi(all_parts, all_durations,
-                                         save_dir="two_voice_mcts_samples",
-                                         name_tag="two_voice_mcts_sample_{}.mid",
+                                         save_dir="three_voice_mcts_samples",
+                                         name_tag="three_voice_mcts_sample_{}.mid",
                                          default_quarter_length=240,
                                          voice_params="piano")
     # add caching here?

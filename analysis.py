@@ -1312,6 +1312,40 @@ def three_voice_rules_from_midi(parts, durations, key_signature):
         assert len(ar) == len(all_rulesets[0])
     return all_rulesets
 
+three_voice_species1_minimal_rules_map = OrderedDict()
+three_voice_species1_minimal_rules_map["bar_consonance_rule"] = bar_consonance_rule
+three_voice_species1_minimal_rules_map["next_step_rule"] = next_step_rule
+three_voice_species1_minimal_rules_map["parallel_rule"] = parallel_rule
+
+def check_three_voice_species1_minimal_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices):
+
+    pairs = [(0, 2), (1, 2), (0, 1)]
+    res = []
+    for n, pair in enumerate(pairs):
+        if n > 0:
+            # skip key start rule on inner voices
+            skip_rules = ["key_start_rule"]
+        else:
+            skip_rules = []
+        res_i = [three_voice_species1_rules_map[arm]([parts[pair[0]], parts[pair[1]]],
+                    [durations[pair[0]], durations[pair[1]]], key_signature,
+                    time_signature, mode, [timings[pair[0]], timings[pair[1]]],
+                    ignore_voices=[], three_voice_relaxation=True, voice_labels=pair)
+                for arm in three_voice_species1_rules_map.keys() if arm not in skip_rules]
+        res.append(res_i)
+
+    global_check = True
+    # only check top 2 voices
+    for res_i in res[:-1]:
+        for r in res_i:
+            rr = [True if ri[0] is True or ri[0] is None else False for ri in r]
+            if all(rr):
+                pass
+            else:
+                global_check = False
+    return (global_check, res)
+
+
 three_voice_species1_rules_map = OrderedDict()
 three_voice_species1_rules_map["key_start_rule"] = key_start_rule
 three_voice_species1_rules_map["bar_consonance_rule"] = bar_consonance_rule
@@ -1366,7 +1400,9 @@ def analyze_three_voices(parts, durations, key_signature_str, time_signature_str
     timings = estimate_timing(parts, durations, time_signature)
 
     ignore_voices = cantus_firmus_voices
-    if species == "species1":
+    if species == "species1_minimal":
+        r = check_three_voice_species1_minimal_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
+    elif species == "species1":
         r = check_three_voice_species1_rule(parts, durations, key_signature, time_signature, mode, timings, ignore_voices)
     else:
         raise ValueError("Unknown species argument {}".format(species))
