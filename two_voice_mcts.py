@@ -39,14 +39,15 @@ class TwoVoiceSpecies1Manager(object):
         if len(state[0]) > 0:
             s0 = np.array(state[0])
             s1 = np.array(state[1])
-            # only allow actions within a jump of a 4th (5)
+            # only allow actions within a jump of a 4th
             # only allow harmonizations above - no voice crossing
             if len(state[0]) >= (len(state[1]) - 2):
                 # allow unison on the last notes
-                va = [p_map[k] for k in sorted(p_map.keys()) if abs(k - state[0][-1]) <= 5 and k >= 0]
+                va = [p_map[k] for k in sorted(p_map.keys()) if abs(k - state[0][-1]) <= 4 and k >= 0]
             else:
-                va = [p_map[k] for k in sorted(p_map.keys()) if abs(k - state[0][-1]) <= 5 and k > 0]
+                va = [p_map[k] for k in sorted(p_map.keys()) if abs(k - state[0][-1]) <= 4 and k > 0]
 
+            """
             # extra contingencies
             # disallow M3/m3 confusions
             # disallow m6/M6 confusions
@@ -79,8 +80,8 @@ class TwoVoiceSpecies1Manager(object):
                 disallowed.append(8)
                 disallowed.append(15)
             disallowed_actions = [p_map[d] for d in disallowed]
-
             va = [vai for vai in va if vai not in disallowed_actions]
+            """
             if len(va) == 0:
                 print("Edge case, 0 valid actions...")
                 from IPython import embed; embed(); raise ValueError()
@@ -103,43 +104,9 @@ class TwoVoiceSpecies1Manager(object):
         s1 = np.array(state[1])
         bot = s1 + self.offset_value
         top = bot[:len(s0)] + s0
-        # smoothness score
-        # range score
-        # note diversity
-        # interval diversity
-        # repetition of notes
-        # repetition of intervals
-        # perfect intervals in a row
-        # distance from center of max note
-        # distance from center of max interval
-        # whether the peak is a unique note or repeated
         smooth_s = 1. / np.sum(np.abs(np.diff(top)))
-        range_s = 1. / float(np.max([np.max(top) - np.min(top), 12]))
-        note_p = 1 - 1. / len(set(top))
-        #interval_p = 1. - 1./ len(set(s0))
-        note_rep = 1. / (.5 + len(np.where(np.diff(top) == 0.)[0]))
-        #interval_rep = 1. / (.5 + len(np.where(np.diff(s0) == 0.)[0]))
-        farthest_from_center_interval = np.where(s0 == np.max(s0))[0]
-        fci = np.argmax(np.abs(farthest_from_center_interval - len(s1) / 2.))
-        fci_argmax = farthest_from_center_interval[fci]
-
-        farthest_from_center_note = np.where(top == np.max(top))[0]
-        fcn = np.argmax(np.abs(farthest_from_center_note - len(s1) / 2.))
-        fcn_argmax = farthest_from_center_note[fcn]
-
-        """
-        perfects_idx = np.where((s0 == 0.) | (s0 == 7.) | (s0 == 12.))[0]
-        lni = np.array([i for i in range(len(s0)) if i + 1 in perfects_idx])
-        rni = np.array([i for i in range(len(s0)) if i - 1 in perfects_idx])
-        dbl_perf = len(np.where((lni[None] - perfects_idx[:, None]).ravel() == 0.)[0])
-        dbl_perf += len(np.where((rni[None] - perfects_idx[:, None]).ravel() == 0.)[0])
-        perfects = 1. / (dbl_perf + 1.)
-        """
-
-        center_note_s = 1. if abs(len(s1) / 2. - fcn) < 3 else 0.
-        center_interval_s = 1. if abs(len(s1) / 2. - fci) < 3 else 0.
-        unique_peak = 1. if len(np.where(top == np.max(top))[0]) == 1 and center_note_s > 0 else 0.
-        return smooth_s + range_s + note_p + note_rep + center_interval_s + center_note_s + unique_peak
+        unique_max = 1. / float(len(np.where(top == np.max(top))[0]))
+        return smooth_s + unique_max
 
     def rollout_from_state(self, state):
         s = state
@@ -170,29 +137,20 @@ class TwoVoiceSpecies1Manager(object):
                 return 0.
 
     def is_finished(self, state):
-        orig_len = len(state[0])
-        if orig_len == 0:
+        if len(state[0]) == 0:
             # nothing has happened yet
             return -1, False
 
-        # do quick hand check for key start to speed it up
-        if state[0][0] not in [0, 12]:
-            return 0, True
-
-        # if the only thing so far is the first note, and we passed that check
-        # it's incomplete
-        if orig_len == 1:
+        if len(state[0]) != len(state[1]):
             return -1, False
 
         # if its at the end, finish on an octave fifth or unison
-        if orig_len == len(state[1]):
-            if state[0][-1] not in [0, 12]:
+        if len(state[0]) == len(state[1]):
+            if state[0][-1] not in [0, 7, 12]:
                 return 0, True
 
-        ns0 = state[0] + [0] * (len(state[1]) - orig_len)
         # the state to check
-        s = [ns0, state[1]]
-
+        s = [state[0], state[1]]
         s = np.array(s)
         s[1, :] += self.offset_value
         s[0, :] += s[1, :]
@@ -205,27 +163,7 @@ class TwoVoiceSpecies1Manager(object):
         # minimal check during rollout
         aok = analyze_two_voices(parts, durations, key_signature, time_signature,
                                  species="species1_minimal", cantus_firmus_voices=[1])
-        if len(aok[1]["False"]) > 0:
-            first_error = aok[1]["False"][0]
-        else:
-            first_error = np.inf
-
-        if orig_len < len(state[1]):
-            # error is out of our control (in the padded notes)
-            if first_error > (orig_len - 1):
-                return -1, False
-            else:
-                # made a mistake
-                return 0, True
-
-        """
-        # mode estimation :|
-        # should be species1
-        aok_full = analyze_two_voices(parts, durations, key_signature, time_signature,
-                                      species="species1_minimal", cantus_firmus_voices=[1])
-        """
-        aok_full = aok
-        if aok_full[0]:
+        if aok[0]:
             return 1, True
         else:
             return 0, True

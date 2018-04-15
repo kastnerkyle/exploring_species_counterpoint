@@ -72,9 +72,6 @@ class ThreeVoiceSpecies1Manager(object):
             combs = [(u, m) for u in va_u for m in va_m]
             # disallow intervals too close together (no m/M2 clashes)
             combs = [c for c in combs if abs(c[0] - c[1]) > 2]
-            # once commited to major/minor tonality, stick with it?
-            disallowed = []
-            combs = [c for c in combs if c[0] not in disallowed and c[1] not in disallowed]
             # check that it is an option
             comb_acts = [j_acts_inv_map[c] for c in combs if c in j_acts_inv_map]
             va = comb_acts
@@ -86,8 +83,6 @@ class ThreeVoiceSpecies1Manager(object):
 
                 # avoid m2/M2 clases
                 combs = [c for c in combs if abs(c[0] - c[1]) > 2]
-                # stick to chosen tonality
-                combs = [c for c in combs if c[0] not in disallowed and c[1] not in disallowed]
                 # make sure it is a valid action
                 comb_acts = [j_acts_inv_map[c] for c in combs if c in j_acts_inv_map]
                 if len(comb_acts) == 0:
