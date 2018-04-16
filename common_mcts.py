@@ -52,7 +52,7 @@ class TreeNode(object):
         # new_Q = Q - Q/n_visits + v/n_visits
         # new_Q = Q + (v - Q) / n_visits
         # new_Q += (v - Q) / n_visits
-        self.Q_ += (value - self.Q_) / self.n_visits_
+        self.Q_ += (value - self.Q_) / float(self.n_visits_)
 
     def update(self, value):
         if self.parent != None:

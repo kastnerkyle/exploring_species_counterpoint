@@ -1233,31 +1233,34 @@ def plot_pitches_and_durations(pitches, durations,
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     for n, (pitches, durations) in enumerate(zip(pitches, durations)):
-        # map midi pitches to lilypond ones... oy
-        voices = pitches_and_durations_to_lilypond_notation(pitches, durations, extras, key_signatures=key_signatures)
-        #plot_lilypond([voices[1]])
-        #plot_lilypond([voices[0]], [voices[-1]])
-        #plot_lilypond([voices[0]], [voices[-1]], own_staves=True)
-        # TODO: fix own_staves=False issues with conflicting time/key signatures
-        # raise an error
-        # down the line, fix accidentals on case by case basis :|
-        # add options for chord notations, and intervals for final analysis
-        # add grey notes (all possibles) as well to visualize the decoding?
-        this_dir = os.getcwd()
-        #full_fpath = save_dir + os.sep + name_tag.format(n)
-        local_fpath = name_tag.format(n)
-        os.chdir(save_dir)
-        # do it this way because lilypond uses the local dir by default...
-        plot_lilypond(voices, own_staves=True,
-                      fpath=local_fpath,
-                      make_pdf=make_pdf,
-                      time_signatures=time_signatures,
-                      key_signatures=key_signatures,
-                      chord_annotations=chord_annotations,
-                      interval_figures=interval_figures,
-                      interval_durations=interval_durations,
-                      use_clefs=use_clefs)
-        os.chdir(this_dir)
+        try:
+            # map midi pitches to lilypond ones... oy
+            voices = pitches_and_durations_to_lilypond_notation(pitches, durations, extras, key_signatures=key_signatures)
+            #plot_lilypond([voices[1]])
+            #plot_lilypond([voices[0]], [voices[-1]])
+            #plot_lilypond([voices[0]], [voices[-1]], own_staves=True)
+            # TODO: fix own_staves=False issues with conflicting time/key signatures
+            # raise an error
+            # down the line, fix accidentals on case by case basis :|
+            # add options for chord notations, and intervals for final analysis
+            # add grey notes (all possibles) as well to visualize the decoding?
+            this_dir = os.getcwd()
+            #full_fpath = save_dir + os.sep + name_tag.format(n)
+            local_fpath = name_tag.format(n)
+            os.chdir(save_dir)
+            # do it this way because lilypond uses the local dir by default...
+            plot_lilypond(voices, own_staves=True,
+                          fpath=local_fpath,
+                          make_pdf=make_pdf,
+                          time_signatures=time_signatures,
+                          key_signatures=key_signatures,
+                          chord_annotations=chord_annotations,
+                          interval_figures=interval_figures,
+                          interval_durations=interval_durations,
+                          use_clefs=use_clefs)
+            os.chdir(this_dir)
+        except:
+            print("Error writing index {}, continuing...".format(n))
 
 
 if __name__ == "__main__":
