@@ -20,7 +20,7 @@ m_inv_map = {v: k for k, v in m_map.items()}
 um_inv_map = {v: k for k, v in um_map.items()}
 l_inv_map = {v: k for k, v in l_map.items()}
 j_map = {(k1, k2): (u_map[k1], m_map[k2]) for k1 in sorted(u_map.keys()) for k2 in sorted(m_map.keys())}
-j_map = {k: v for k, v in j_map.items() if k[0] >= k[1]}
+#j_map = {k: v for k, v in j_map.items() if k[0] >= k[1]}
 j_map = {k: v for k, v in j_map.items() if k[0] != 0 and k[1] != 0}
 # don't constrain to only groupings found in the dataset
 #j_map = {k: v for k, v in j_map.items() if k in all_c_set}
@@ -67,11 +67,11 @@ class ThreeVoiceSpecies1Manager(object):
             return va
         else:
             # keep the jumps within a 4th on top voice
-            va_u = [u_map[k] for k in sorted(u_map.keys()) if abs(k - state[0][-1]) <= 4 and k >= 0]
+            va_u = [u_map[k] for k in sorted(u_map.keys()) if abs(k - state[0][-1]) <= 7 and k >= 0]
             va_m = [m_map[k] for k in sorted(m_map.keys()) if k >= 0]
             combs = [(u, m) for u in va_u for m in va_m]
             # disallow intervals too close together (no m/M2 clashes)
-            combs = [c for c in combs if abs(c[0] - c[1]) > 2 and c[0] > c[1]]
+            combs = [c for c in combs if abs(c[0] - c[1]) > 2]
             # check that it is an option
             comb_acts = [j_acts_inv_map[c] for c in combs if c in j_acts_inv_map]
             va = comb_acts

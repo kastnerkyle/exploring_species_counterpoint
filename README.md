@@ -1,10 +1,10 @@
 # exploring\_species\_counterpoint
 Experiments in species counterpoint
 
-Workbook from www.ianstoner.com/pdf/fux\_workbook\_0.1.pdf
+Implementing rules from "The Study of Counterpoint", from Johann Joseph Fux's "Gradus Ad Parnassum", translated by Alfred Mann
 
-run.sh will launch 2 keepalive bash scripts, that run the training and data generation processes in parallel
+We don't follow all the rules (a lot are violable, and are more preferences than true rules), but a large subset + strong checking
 
-To kill these scipts, you MUST first kill the keepalive bash processes, *_runner.sh , then the process itself
+Including workbook from www.ianstoner.com/pdf/fux\_workbook\_0.1.pdf
 
-You will likely need to kill them with kill -9
+Additional quick notes from http://www.cs.columbia.edu/~gmw/music/jesscp/rules.pdf

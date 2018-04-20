@@ -605,3 +605,15 @@ def fetch_three_voice_species1():
     all_ex.append(ex)
     return all_ex
 
+
+def fetch_three_voice_mcts_species1_counterexample():
+    all_ex = []
+
+    ex = {"notes_and_durations": [[('G#4', '4'), ('F#4', '4'), ('B4', '4'), ('D5', '4'), ('G5', '4'), ('G#4', '4'), ('G#4', '4'), ('Bb4', '4'), ('C5', '4'), ('C#5', '4'), ('Eb5', '4'), ('G#4', '4')],
+                                  [('C4', '4'), ('B3', '4'), ('B3', '4'), ('A3', '4'), ('B3', '4'), ('G3', '4'), ('G3', '4'), ('B3', '4'), ('G#4', '4'), ('A4', '4'), ('D4', '4'), ('G3', '4')],
+                                  [('C3', '4'), ('D3', '4'), ('E3', '4'), ('F3', '4'), ('G3', '4'), ('C3', '4'), ('C3', '4'), ('D3', '4'), ('E3', '4'), ('F3', '4'), ('G3', '4'), ('C3', '4')]],
+          "answers": [True] * 12,
+          "name": "mcts1",
+          "cantus_firmus_voice": 2}
+    all_ex.append(ex)
+    return all_ex

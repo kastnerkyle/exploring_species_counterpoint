@@ -377,7 +377,10 @@ perfect_intervals = {"P1": None,
                      "P4": None,
                      "P11": None,
                      "P12": None,
-                     "P15": None}
+                     "P15": None,
+                     "P18": None,
+                     "P19": None,
+                     "P22": None}
 neg_perfect_intervals = {"-"+str(k): None for k in perfect_intervals.keys() if "R" not in k}
 harmonic_intervals = {"RP1": None,
                       "P1": None,
@@ -396,7 +399,14 @@ harmonic_intervals = {"RP1": None,
                       "M13": None,
                       "P15": None,
                       "m17": None,
-                      "M17": None}
+                      "M17": None,
+                      "P18": None,
+                      "P19": None,
+                      "m20": None,
+                      "M20": None,
+                      "P22": None,
+                      "m24": None,
+                      "M24": None}
 neg_harmonic_intervals = {"-"+str(k): None for k in harmonic_intervals.keys() if "R" not in k}
 nonharmonic_intervals = {"m2": None,
                          "M2": None,
@@ -407,7 +417,14 @@ nonharmonic_intervals = {"m2": None,
                          "M9": None,
                          "a11": None,
                          "m14": None,
-                         "M14": None}
+                         "M14": None,
+                         "m16": None,
+                         "M16": None,
+                         "a18": None,
+                         "m21": None,
+                         "M21": None,
+                         "m23": None,
+                         "M23": None}
 neg_nonharmonic_intervals = {"-"+str(k): None for k in nonharmonic_intervals.keys() if "R" not in k}
 
 allowed_perfect_motion = {"CONTRARY": None,
@@ -1335,8 +1352,10 @@ def check_three_voice_species1_minimal_rule(parts, durations, key_signature, tim
         res.append(res_i)
 
     global_check = True
+    # better check all 3...
+    for res_i in res:
     # only check top 2 voices
-    for res_i in res[:-1]:
+    #for res_i in res[:-1]:
         for r in res_i:
             rr = [True if ri[0] is True or ri[0] is None else False for ri in r]
             if all(rr):
@@ -1472,6 +1491,54 @@ def test_three_voice_species1():
             print("Test passed for note sequence {}".format(fig_name))
 
 
+def test_three_voice_mcts_species1_counterexample():
+    print("Running test for three voice species1...")
+    all_ex = fetch_three_voice_mcts_species1_counterexample()
+
+    for ex in all_ex:
+        nd = ex["notes_and_durations"]
+        notes = [[ndii[0] for ndii in ndi] for ndi in nd]
+        durations = [[ndii[1] for ndii in ndi] for ndi in nd]
+        #notes = ex["notes"]
+        #durations = ex["durations"]
+        answers = ex["answers"]
+        fig_name = ex["name"]
+        ig = [ex["cantus_firmus_voice"],]
+        parts = notes_to_midi(notes)
+        key_signature = "C"
+        time_signature = "4/4"
+        aok = analyze_three_voices(parts, durations, key_signature, time_signature,
+                                   species="species1_minimal", cantus_firmus_voices=ig)
+        from IPython import embed; embed(); raise ValueError()
+        aok_lu = aok[1]
+        aok_rules = aok[2]
+
+        all_answers = [-1] * len(answers)
+
+        for a in aok[-1]:
+            if all_answers[a[0]] == -1:
+                all_answers[a[0]] = a[1]
+            else:
+                if a[1] in [None, True]:
+                    if all_answers[a[0]] == None:
+                        all_answers[a[0]] = True
+                    else:
+                        all_answers[a[0]] &= True
+                else:
+                    if all_answers[a[0]] == None:
+                        all_answers[a[0]] = False
+                    else:
+                        all_answers[a[0]] &= False
+        all_answers = [True if aa == None else aa for aa in all_answers]
+        assert len(all_answers) == len(answers)
+        equal = [aa == a for aa, a in zip(all_answers, answers)]
+        if not all(equal):
+            print("Test FAIL for note sequence {}".format(fig_name))
+            from IPython import embed; embed(); raise ValueError()
+        else:
+            print("Test passed for note sequence {}".format(fig_name))
+
+
 
 if __name__ == "__main__":
     import argparse
@@ -1481,13 +1548,15 @@ if __name__ == "__main__":
     from datasets import fetch_two_voice_species3
     from datasets import fetch_two_voice_species4
     from datasets import fetch_three_voice_species1
+    from datasets import fetch_three_voice_mcts_species1_counterexample
 
 
-    test_two_voice_species1()
+    #test_two_voice_species1()
     #test_two_voice_species2()
     #test_two_voice_species3()
     #test_two_voice_species4()
-    test_three_voice_species1()
+    #test_three_voice_species1()
+    test_three_voice_mcts_species1_counterexample()
 
     """
     # fig 5, gradus ad parnassum
