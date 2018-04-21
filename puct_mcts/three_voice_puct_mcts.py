@@ -37,8 +37,8 @@ j_acts_inv_map = {v: k for k, v in j_acts_map.items()}
 
 class ThreeVoiceSpecies1Manager(object):
     def __init__(self, guide_index, default_mode="A", rollout_limit=1000):
-        self.default_mode = "A"
-        self.offset_value = 57
+        self.default_mode = "C"
+        self.offset_value = 48
         # M or m or - major or minor tonality or any
         self.tonality = "m"
         self.guide_trace = all_l[guide_index]
@@ -60,16 +60,16 @@ class ThreeVoiceSpecies1Manager(object):
         s2 = np.array(state[2])
 
         if self.tonality == "M":
-            disallowed = [3, 8, 15]
+            disallowed = [3, 8, 15, 27]
         elif self.tonality == "m":
-            disallowed = [4, 9, 16]
+            disallowed = [4, 9, 16, 28]
         elif self.tonality == "-":
             disallowed = []
         else:
             raise ValueError("self.tonality setting {} not understood".format(self.tonality))
 
         if len(state[0]) == 0:
-            # for first note, keep it pretty open
+            # for first notes, keep it pretty open
             va_u = [u_map[k] for k in sorted(u_map.keys())]
             va_m = [m_map[k] for k in sorted(m_map.keys())]
             combs = [(u, m) for u in va_u for m in va_m]
@@ -89,15 +89,16 @@ class ThreeVoiceSpecies1Manager(object):
             va_m = [m_map[k] for k in sorted(m_map.keys())]
             combs = [(u, m) for u in va_u for m in va_m]
             combs = [(u_inv_map[c[0]], m_inv_map[c[1]]) for c in combs]
-            # no leaps of greater than a 6th
+            # no leaps of greater than a 6th in either voice
             combs = [c for c in combs if abs(c[0] - state[0][-1]) <= 9]
             combs = [c for c in combs if abs(c[1] - state[1][-1]) <= 9]
+            # disallow leaps of greater than a 4th in the top voice
+            combs = [c for c in combs if abs(c[0] - state[0][-1]) <= 5]
             # disallow intervals too close together (no m/M2 clashes)
             combs = [c for c in combs if abs(c[0] - c[1]) > 2 and c[0] > c[1]]
             # remove combinations that violate our previous settings for m/M tonality
             combs = [c for c in combs
                      if (c[0] not in disallowed and c[1] not in disallowed)]
-
             # convert to correct option (intervals)
             # make sure it's a viable action
             comb_acts = [j_acts_inv_map[c] for c in combs if c in j_acts_inv_map]
@@ -382,8 +383,7 @@ if __name__ == "__main__":
     all_parts = []
     all_durations = []
     mcts_random = np.random.RandomState(1110)
-    #for guide_idx in range(len(all_l)):
-    for guide_idx in [0]:#range(len(all_l)):
+    for guide_idx in range(len(all_l)):
         tvsp1m = ThreeVoiceSpecies1Manager(guide_idx)
         mcts = MCTS(tvsp1m, n_playout=1000, random_state=mcts_random)
         resets = 0

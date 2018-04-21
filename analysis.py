@@ -654,7 +654,6 @@ def parallel_rule(parts, durations, key_signature, time_signature, mode, timings
         if ti in perfect_intervals or ti in neg_perfect_intervals:
             if three_voice_relaxation:
                 allowed = allowed_perfect_motion
-                allowed["SIMILAR"] = None
             else:
                 allowed = allowed_perfect_motion
             if tm in allowed:
@@ -1431,7 +1430,8 @@ def analyze_three_voices(parts, durations, key_signature_str, time_signature_str
     true_false["False"] = []
     this_ok = []
     # only check top 2 voice pairs
-    for res_i in r[1][:-1]:
+    #for res_i in r[1][:-1]:
+    for res_i in r[1]:
         for rr in res_i:
             for n in range(len(rr)):
                 this_ok.append((n, rr[n][0], rr[n][1]))
@@ -1509,7 +1509,6 @@ def test_three_voice_mcts_species1_counterexample():
         time_signature = "4/4"
         aok = analyze_three_voices(parts, durations, key_signature, time_signature,
                                    species="species1_minimal", cantus_firmus_voices=ig)
-        from IPython import embed; embed(); raise ValueError()
         aok_lu = aok[1]
         aok_rules = aok[2]
 
