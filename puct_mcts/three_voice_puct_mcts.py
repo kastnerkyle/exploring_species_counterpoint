@@ -36,11 +36,11 @@ j_acts_map = {k: v for k, v in enumerate(sorted(j_map.keys()))}
 j_acts_inv_map = {v: k for k, v in j_acts_map.items()}
 
 class ThreeVoiceSpecies1Manager(object):
-    def __init__(self, guide_index, default_mode="A", rollout_limit=1000):
-        self.default_mode = "C"
-        self.offset_value = 48
-        # M or m or - major or minor tonality or any
-        self.tonality = "m"
+    def __init__(self, guide_index, default_mode="C", offset_value=48, tonality="m", rollout_limit=1000):
+        self.default_mode = default_mode
+        self.offset_value = offset_value
+        # M or m or - major or minor or any tonality
+        self.tonality = tonality
         self.guide_trace = all_l[guide_index]
 
         self.random_state = np.random.RandomState(1999)
@@ -60,9 +60,11 @@ class ThreeVoiceSpecies1Manager(object):
         s2 = np.array(state[2])
 
         if self.tonality == "M":
-            disallowed = [3, 8, 15, 27]
+            # disallow minor 3rds and 6ths
+            disallowed = [3, 8, 15, 20, 27]
         elif self.tonality == "m":
-            disallowed = [4, 9, 16, 28]
+            # disallow major 3rds and 6ths
+            disallowed = [4, 9, 16, 21, 28]
         elif self.tonality == "-":
             disallowed = []
         else:
@@ -74,11 +76,14 @@ class ThreeVoiceSpecies1Manager(object):
             va_m = [m_map[k] for k in sorted(m_map.keys())]
             combs = [(u, m) for u in va_u for m in va_m]
             combs = [(u_inv_map[c[0]], m_inv_map[c[1]]) for c in combs]
-            # disallow intervals too close together (no m/M2 clashes)
-            combs = [c for c in combs if abs(c[0] - c[1]) > 2 and c[0] > c[1]]
+
+            # no voice crossing, m/M2 or unison
+            combs = [c for c in combs if abs(c[1] - c[0]) > 2 and c[0] > c[1]]
+
             # remove combinations that violate our previous settings for m/M tonality
             combs = [c for c in combs
                      if (c[0] not in disallowed and c[1] not in disallowed)]
+
             # convert to correct option (intervals)
             # make sure it's a viable action
             comb_acts = [j_acts_inv_map[c] for c in combs if c in j_acts_inv_map]
@@ -92,10 +97,13 @@ class ThreeVoiceSpecies1Manager(object):
             # no leaps of greater than a 6th in either voice
             combs = [c for c in combs if abs(c[0] - state[0][-1]) <= 9]
             combs = [c for c in combs if abs(c[1] - state[1][-1]) <= 9]
-            # disallow leaps of greater than a 4th in the top voice
+
+            # heavily constrain top voice, no leap greater than a 4th
             combs = [c for c in combs if abs(c[0] - state[0][-1]) <= 5]
-            # disallow intervals too close together (no m/M2 clashes)
-            combs = [c for c in combs if abs(c[0] - c[1]) > 2 and c[0] > c[1]]
+
+            # no voice crossing, m/M2 or unison
+            combs = [c for c in combs if abs(c[1] - c[0]) > 2 and c[0] > c[1]]
+
             # remove combinations that violate our previous settings for m/M tonality
             combs = [c for c in combs
                      if (c[0] not in disallowed and c[1] not in disallowed)]
@@ -125,7 +133,7 @@ class ThreeVoiceSpecies1Manager(object):
         smooth_s1 = 1. / np.sum(np.abs(np.diff(mid)))
         unique_max = 1. / float(len(np.where(top == np.max(top))[0]))
         unique_count = 1. / float(len(set(s0)))
-        return 1. + smooth_s0 + smooth_s1 + unique_max + unique_count
+        return smooth_s0 #1. + 1. * smooth_s0 + .25 * smooth_s1 + .25 * unique_max
 
     def rollout_from_state(self, state):
         s = state
