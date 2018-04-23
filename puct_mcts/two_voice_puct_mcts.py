@@ -14,79 +14,82 @@ import copy
 from dataset_wrap import two_voice_species1_wrap
 from analysis import analyze_two_voices
 
-window_p, window_l, p_map, l_map, all_p, all_l, all_i = two_voice_species1_wrap()
+all_l, l_map, p_map, all_i = two_voice_species1_wrap()
+l_inv_map = {v: k for k, v in l_map.items()}
 p_inv_map = {v: k for k, v in p_map.items()}
-# get rid of the awkward one?
-all_l = [l for l in all_l if l[1] == 0]
+
+va_p = [p_map[k] for k in sorted(p_map.keys())]
+j_map = {p_inv_map[k1]: k1 for k1 in va_p}
+j_map = {k: v for k, v in j_map.items() if k > 0}
+j_inv_map = {v: k for k, v in j_map.items()}
+
+j_acts_map = {k: v for k, v in enumerate(sorted(j_map.keys()))}
+j_acts_inv_map = {v: k for k, v in j_acts_map.items()}
 
 class TwoVoiceSpecies1Manager(object):
-    def __init__(self, guide_index, default_mode="C", rollout_limit=1000):
-        self.default_mode = "C"
-        self.offset_value = 60
-        self.guide_trace = all_l[guide_index][1:-1]
+    def __init__(self, guide_index, default_mode="C", offset_value=60, tonality="-", rollout_limit=1000):
+        self.default_mode = default_mode
+        self.offset_value = offset_value
+        # M or m or - major or minor or any tonality
+        self.tonality = tonality
+        self.guide_trace = all_l[guide_index]
 
         self.random_state = np.random.RandomState(1999)
         self.rollout_limit = rollout_limit
 
     def get_next_state(self, state, action):
-        interval = p_inv_map[action]
-        return [state[0] + [interval], state[1]]
+        act = j_acts_map[action]
+        new_state = [state[0] + [act], state[1]]
+        return new_state
 
     def get_action_space(self):
-        return list(range(len({p for p in p_map if p < 97})))
+        return list(range(len(j_acts_map.keys())))
 
     def get_valid_actions(self, state):
-        if len(state[0]) > 0:
-            s0 = np.array(state[0])
-            s1 = np.array(state[1])
-            # only allow actions within a jump of a 4th
-            # only allow harmonizations above - no voice crossing
-            if len(state[0]) >= (len(state[1]) - 2):
-                # allow unison on the last notes
-                va = [p_map[k] for k in sorted(p_map.keys()) if abs(k - state[0][-1]) <= 4 and k >= 0]
-            else:
-                va = [p_map[k] for k in sorted(p_map.keys()) if abs(k - state[0][-1]) <= 4 and k > 0]
+        s0 = np.array(state[0])
+        s1 = np.array(state[1])
 
-            # extra contingencies
-            # disallow M3/m3 confusions
-            # disallow m6/M6 confusions
-            # disallow same on 15/16 (m3/M3)
+        if self.tonality == "M":
+            # disallow minor 3rds and 6ths
+            disallowed = [3, 8, 15, 20, 27]
+        elif self.tonality == "m":
+            # disallow major 3rds and 6ths
+            disallowed = [4, 9, 16, 21, 28]
+        elif self.tonality == "-":
             disallowed = []
-            if 3 in s0:
-                disallowed.append(4)
-                disallowed.append(9)
-                disallowed.append(16)
-            if 4 in s0:
-                disallowed.append(3)
-                disallowed.append(8)
-                disallowed.append(15)
-
-            if 15 in s0:
-                disallowed.append(4)
-                disallowed.append(9)
-                disallowed.append(16)
-            if 16 in s0:
-                disallowed.append(3)
-                disallowed.append(8)
-                disallowed.append(15)
-
-            if 8 in s0:
-                disallowed.append(4)
-                disallowed.append(9)
-                disallowed.append(16)
-            if 9 in s0:
-                disallowed.append(3)
-                disallowed.append(8)
-                disallowed.append(15)
-            disallowed_actions = [p_map[d] for d in disallowed]
-            va = [vai for vai in va if vai not in disallowed_actions]
-            if len(va) == 0:
-                print("Edge case, 0 valid actions...")
-                from IPython import embed; embed(); raise ValueError()
-            return va
         else:
-            # could constrain the start much more, but leave it for now
-            return [p_map[k] for k in sorted(p_map.keys()) if k < 97 and k >= 0]
+            raise ValueError("self.tonality setting {} not understood".format(self.tonality))
+
+        if len(state[0]) == 0:
+            # for first notes, keep it pretty open
+            va_p = [p_map[k] for k in sorted(p_map.keys())]
+            acts_i = [p for p in va_p]
+            acts = [p_inv_map[a] for a in acts_i]
+
+            # no voice crossing, m/M2
+            acts = [a for a in acts if a > 2]
+
+            # remove combinations violating tonality
+            acts = [a for a in acts if a not in disallowed]
+
+            acts_r = [j_acts_inv_map[a] for a in acts if a in j_acts_inv_map]
+            return acts_r
+        else:
+            va_p = [p_map[k] for k in sorted(p_map.keys())]
+            acts_i = [p for p in va_p]
+            acts = [p_inv_map[a] for a in acts_i]
+
+            # no leaps of greater than a 4th
+            acts = [a for a in acts if abs(a - state[0][-1]) <= 5]
+
+            # no voice crossing, m/M2
+            acts = [a for a in acts if a > 2]
+
+            # remove combinations violating tonality
+            acts = [a for a in acts if a not in disallowed]
+
+            acts_r = [j_acts_inv_map[a] for a in acts if a in j_acts_inv_map]
+            return acts_r
 
     def get_init_state(self):
         # need to inspect the others...
@@ -105,16 +108,16 @@ class TwoVoiceSpecies1Manager(object):
         unique_count = len(set(list(s0))) / float(len(s0))
         smooth_s = 1. / np.sum(np.abs(np.diff(top)))
         unique_max = 1. / float(len(np.where(top == np.max(top))[0]))
-        return smooth_s + unique_max + unique_count
+        return smooth_s #+ unique_max + unique_count
 
     def rollout_from_state(self, state):
         s = state
-        w, e = self.is_finished(state)
+        w, sc, e = self.is_finished(state)
         if e:
             if w == -1:
-                return 0.
-            elif w == 0:
                 return -1
+            elif w == 0:
+                return sc
             else:
                 return self._score(s)
 
@@ -122,13 +125,13 @@ class TwoVoiceSpecies1Manager(object):
         while True:
             a = self._rollout_fn(s)
             s = self.get_next_state(s, a)
-            w, e = self.is_finished(s)
+            w, sc, e = self.is_finished(s)
             c += 1
             if e:
                 if w == -1:
-                    return 0.
-                elif w == 0:
                     return -1
+                elif w == 0:
+                    return sc
                 else:
                     return self._score(s)
 
@@ -136,21 +139,17 @@ class TwoVoiceSpecies1Manager(object):
                 return 0.
 
     def is_finished(self, state):
+        if len(self.get_valid_actions(state)) == 0:
+            return -1., -1., True
+
         if len(state[0]) == 0:
             # nothing has happened yet
-            return -1, False
+            return 0, 0., False
 
-        if len(state[0]) != len(state[1]):
-            return -1, False
+        ns0 = state[0] + [0] * (len(state[1]) - len(state[0]))
+        s_l = [ns0, state[1]]
 
-        # if its at the end, finish on an octave fifth or unison
-        if len(state[0]) == len(state[1]):
-            if state[0][-1] not in [0, 7, 12]:
-                return 0, True
-
-        # the state to check
-        s = [state[0], state[1]]
-        s = np.array(s)
+        s = np.array(s_l)
         s[1, :] += self.offset_value
         s[0, :] += s[1, :]
 
@@ -159,13 +158,26 @@ class TwoVoiceSpecies1Manager(object):
         key_signature = "C"
         time_signature = "4/4"
         # add caching here?
-        # minimal check during rollout
         aok = analyze_two_voices(parts, durations, key_signature, time_signature,
                                  species="species1_minimal", cantus_firmus_voices=[1])
-        if aok[0]:
-            return 1, True
+
+        if len(aok[1]["False"]) > 0:
+            first_error = aok[1]["False"][0]
         else:
-            return 0, True
+            first_error = np.inf
+
+        if len(state[0]) < len(state[1]):
+            # error is out of our control (in the padded notes)
+            if first_error > (len(state[0]) - 1):
+                return 0, 0., False
+            else:
+                # made a mistake
+                return 0, -1. + len(state[0]) / float(len(state[1])), True
+        elif aok[0]:
+            return 1, 1., True
+        else:
+            return -1, -1., True
+
 
 def softmax(x):
     assert len(x.shape) == 1
@@ -252,7 +264,7 @@ class MCTS(object):
                 break
             action, node = node.get_best(self.c_puct)
             state = self.state_manager.get_next_state(state, action)
-        winner, end = self.state_manager.is_finished(state)
+        winner, score, end = self.state_manager.is_finished(state)
         if not end:
             # uniform prior probs
             actions = self.state_manager.get_valid_actions(state)
@@ -261,7 +273,6 @@ class MCTS(object):
             actions_and_probs = list(zip(actions, probs))
             node.expand(actions_and_probs)
         value = self.state_manager.rollout_from_state(state)
-        # negative here
         node.update(value)
         return None
 
@@ -271,6 +282,8 @@ class MCTS(object):
             self.playout(state)
 
         act_visits = [(act, node.n_visits_) for act, node in self.root.children_.items()]
+        if len(act_visits) == 0:
+            return None, None
         actions, visits = zip(*act_visits)
         action_probs = softmax(1. / temp * np.log(visits))
         return actions, action_probs
@@ -280,6 +293,8 @@ class MCTS(object):
         vsz = len(self.state_manager.get_action_space())
         act_probs = np.zeros((vsz,))
         acts, probs = self.get_action_probs(state, temp)
+        if acts == None:
+            return acts, probs
         act_probs[list(acts)] = probs
         if add_noise:
             act = self.random_state.choice(acts, p=(1. - dirichlet_coeff1) * probs + dirichlet_coeff1 * self.random_state.dirichlet(dirichlet_coeff2 * np.ones(len(probs))))
@@ -292,6 +307,8 @@ class MCTS(object):
         act_probs = np.zeros((vsz,))
         # temp doesn't matter for argmax
         acts, probs = self.get_action_probs(state, temp=1.)
+        if acts == None:
+            return acts, probs
         act_probs[list(acts)] = probs
         maxes = np.max(act_probs)
         opts = np.where(act_probs == maxes)[0]
@@ -337,7 +354,6 @@ if __name__ == "__main__":
     all_parts = []
     all_durations = []
     mcts_random = np.random.RandomState(1110)
-    #for guide_idx in [0, 1]:
     for guide_idx in range(len(all_l)):
         tvsp1m = TwoVoiceSpecies1Manager(guide_idx)
         mcts = MCTS(tvsp1m, n_playout=1000, random_state=mcts_random)
@@ -355,7 +371,7 @@ if __name__ == "__main__":
                 temp = 1E-3
                 noise = False
             state = mcts.state_manager.get_init_state()
-            winner, end = mcts.state_manager.is_finished(state)
+            winner, score, end = mcts.state_manager.is_finished(state)
             states = [state]
             while True:
                 if not end:
@@ -363,6 +379,13 @@ if __name__ == "__main__":
                     #print(state)
                     #a, ap = mcts.sample_action(state, temp=temp, add_noise=noise)
                     a, ap = mcts.get_action(state)
+
+                    if a is None:
+                        print("Ran out of valid actions, stopping early at step {}".format(len(states)))
+                        valid_state_traces.append(states[-1])
+                        n_valid_samples += 1
+                        break
+
                     for i in mcts.root.children_.keys():
                         print(i, mcts.root.children_[i].__dict__)
                         print("")
@@ -370,7 +393,7 @@ if __name__ == "__main__":
                     mcts.update_tree_root(a)
                     state = mcts.state_manager.get_next_state(state, a)
                     states.append(state)
-                    winner, end = mcts.state_manager.is_finished(state)
+                    winner, score, end = mcts.state_manager.is_finished(state)
                 else:
                     mcts.reconstruct_tree()
                     print(state)
@@ -387,6 +410,7 @@ if __name__ == "__main__":
         s0 = np.array(s[0])
         s1 = np.array(s[1])
         bot = s1 + mcts.state_manager.offset_value
+        bot = bot[:len(s0)]
         top = bot + s0
         parts = [list(top), list(bot)]
         durations = [['4'] * len(p) for p in parts]

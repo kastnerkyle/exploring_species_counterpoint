@@ -36,7 +36,7 @@ j_acts_map = {k: v for k, v in enumerate(sorted(j_map.keys()))}
 j_acts_inv_map = {v: k for k, v in j_acts_map.items()}
 
 class ThreeVoiceSpecies1Manager(object):
-    def __init__(self, guide_index, default_mode="C", offset_value=48, tonality="m", rollout_limit=1000):
+    def __init__(self, guide_index, default_mode="C", offset_value=48, tonality="-", rollout_limit=1000):
         self.default_mode = default_mode
         self.offset_value = offset_value
         # M or m or - major or minor or any tonality
