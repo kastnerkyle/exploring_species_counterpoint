@@ -137,7 +137,7 @@ class ThreeVoiceSpecies1Manager(object):
             combs = [(u_inv_map[c[0]], m_inv_map[c[1]]) for c in combs]
 
             # no voice crossing, m/M2 or unison
-            combs = [c for c in combs if abs(c[1] - c[0]) > 2 and c[0] > c[1]]
+            combs = [c for c in combs if abs(c[1] - c[0]) > 2 and c[0] > c[1] and c[1] != 0]
 
             # remove combinations that violate our previous settings for m/M tonality
             #combs = [c for c in combs
@@ -158,23 +158,24 @@ class ThreeVoiceSpecies1Manager(object):
             combs = [(u, m) for u in va_u for m in va_m]
             combs = [(u_inv_map[c[0]], m_inv_map[c[1]]) for c in combs]
 
+            state_len = len(state[0])
+            state_len = min(state_len, len(state[2]) - 1)
+
             # no leaps of greater than a 6th in either voice
-            combs = [c for c in combs if abs(c[0] - state[0][-1]) <= 9]
-            combs = [c for c in combs if abs(c[1] - state[1][-1]) <= 9]
+            combs = [c for c in combs if abs((c[0] + state[2][state_len]) - (state[0][state_len - 1] + state[2][state_len - 1])) <= 9]
+            combs = [c for c in combs if abs((c[1] + state[2][state_len]) - (state[1][state_len - 1] + state[2][state_len - 1])) <= 9]
 
             # heavily constrain top voice, no leap greater than a 4th
-            combs = [c for c in combs if abs(c[0] - state[0][-1]) <= 5]
+            combs = [c for c in combs if abs((c[0] + state[2][state_len]) - (state[0][state_len - 1] + state[2][state_len - 1])) <= 5]
 
             # no voice crossing, m/M2 or unison
-            combs = [c for c in combs if abs(c[1] - c[0]) > 2 and c[0] > c[1]]
+            combs = [c for c in combs if abs(c[1] - c[0]) > 2 and c[0] > c[1] and c[1] != 0]
 
             # remove combinations that violate our previous settings for m/M tonality
             #combs = [c for c in combs
             #         if (c[0] not in disallowed and c[1] not in disallowed)]
 
             # remove combinations with notes not in the scale
-            state_len = len(state[0])
-            state_len = min(state_len, len(state[2]) - 1)
             combs = [c for c in combs
                      if c[0] + self.offset_value + state[2][state_len] in self.notes_in_scale and
                      c[1] + self.offset_value + state[2][state_len] in self.notes_in_scale]
@@ -297,9 +298,7 @@ if __name__ == "__main__":
     all_parts = []
     all_durations = []
     mcts_random = np.random.RandomState(1110)
-    for guide_idx in [0]:
-    #for guide_idx in [0, 15]:
-    #for guide_idx in range(len(all_l)):
+    for guide_idx in range(len(all_l)):
         tvsp1m = ThreeVoiceSpecies1Manager(guide_idx)
         mcts = MCTS(tvsp1m, n_playout=1000, random_state=mcts_random)
         resets = 0
@@ -333,9 +332,6 @@ if __name__ == "__main__":
                     if a is None:
                         print("Ran out of valid actions, stopping early at step {}".format(len(states)))
                         print("No actions")
-                        from IPython import embed; embed(); raise ValueError()
-                        valid_state_traces.append(states[-1])
-                        n_valid_samples += 1
                         end = True
 
                     if not end:
@@ -355,13 +351,22 @@ if __name__ == "__main__":
 
                     # used to finalize partials
                     poss = [0, 7, 12, 19, 24]
+                    if 3 in mcts.state_manager.scale_steps:
+                        poss += [3, 15, 27]
+                    else:
+                        poss += [4, 16, 28]
                     possible_ends = [(c0, c1) for c0 in poss for c1 in poss]
                     possible_ends = [(c[0], c[1]) for c in possible_ends if c[0] >= c[1]]
 
                     min_diff = np.inf
                     min_idx = -1
                     for ii, pe in enumerate(possible_ends):
-                        diff = abs(states[-1][0][-1] - pe[0]) + abs(states[-1][1][-1] - pe[1])
+                        tm1 = states[-1][0][-1]
+                        mm1 = states[-1][1][-1]
+                        bm1 = states[-1][2][len(states[-1][0]) - 2]
+                        bm2 = states[-1][2][len(states[-1][0]) - 1]
+
+                        diff = abs((tm1 + bm2) - (bm1 + pe[0])) + abs((mm1 + bm2) - (bm1 + pe[1]))
                         if diff < min_diff:
                             min_diff = diff
                             min_idx = ii
@@ -390,7 +395,7 @@ if __name__ == "__main__":
         print("completed {}".format(guide_idx))
     key_signature = "C"
     time_signature = "4/4"
-    clefs = ["treble", "bass"]
+    clefs = ["treble", "treble", "bass"]
     # now dump samples
     pitches_and_durations_to_pretty_midi(all_parts, all_durations,
                                          save_dir="three_voice_puct_mcts_samples",
@@ -400,10 +405,10 @@ if __name__ == "__main__":
 
     plot_pitches_and_durations(all_parts, all_durations,
                                save_dir="three_voice_puct_mcts_plots",
-                               name_tag="three_voice_puct_mcts_plot_{}.ly")
+                               name_tag="three_voice_puct_mcts_plot_{}.ly",
                                #interval_figures=interval_figures,
                                #interval_durations=interval_durations,
-                               #use_clefs=clefs)
+                               use_clefs=clefs)
 
     # add caching here?
     # minimal check during rollout
