@@ -8,3 +8,5 @@ We don't follow all the rules (a lot are violable, and are more preferences than
 Including workbook from www.ianstoner.com/pdf/fux\_workbook\_0.1.pdf
 
 Additional quick notes from http://www.cs.columbia.edu/~gmw/music/jesscp/rules.pdf
+
+Notes from http://davesmey.com/brooklynconservatory/theory6/h05counterpointwiththreevoices.pdf
