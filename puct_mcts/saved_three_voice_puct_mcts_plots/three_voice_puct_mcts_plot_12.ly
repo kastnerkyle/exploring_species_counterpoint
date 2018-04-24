@@ -528,8 +528,8 @@ analysis = \lyricmode {
 }
 {
 \new StaffGroup << 
-  \new Voice = "voice0" {\clef "treble" cis'1 e'1 b1 d'1 e'1 e'1 a'1 e'1 d'1 fis'1 e'1 e''1 }
-  \new Voice = "voice1" {\clef "treble" fis1 cis1 gis1 fis1 cis'1 e1 a,1 e1 b1 fis1 cis'1 cis''1 }
+  \new Voice = "voice0" {\clef "treble" e'1 e'1 b1 b1 cis'1 d'1 cis'1 e'1 d'1 fis'1 e'1 e'1 }
+  \new Voice = "voice1" {\clef "treble" cis1 e1 gis1 fis1 a1 b1 a1 a1 b1 fis1 gis1 a1 }
   \new Voice = "voice2" {\clef "bass" a,1 a,1 e1 d1 a,1 g,1 f,1 c1 d1 a,1 e1 a1 }
   \new Lyrics \lyricsto "voice2" { \analysis }
 >>

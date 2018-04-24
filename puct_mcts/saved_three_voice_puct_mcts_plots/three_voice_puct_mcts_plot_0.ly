@@ -528,9 +528,9 @@ analysis = \lyricmode {
 }
 {
 \new StaffGroup << 
-  \new Voice = "voice0" {\clef "treble" g''1 f''1 g''1 f''1 e''1 g''1 e''1 f''1 c''1 c''1 e''1 c''1 }
-  \new Voice = "voice1" {\clef "treble" e''1 d''1 c''1 a'1 b'1 e'1 c''1 f'1 g'1 a'1 b'1 g'1 }
-  \new Voice = "voice2" {\clef "treble" c'1 d'1 e'1 f'1 g'1 c'1 c'1 d'1 e'1 f'1 g'1 c'1 }
+  \new Voice = "voice0" {\clef "treble" g''1 f''1 e''1 d''1 d''1 g''1 g''1 f''1 e''1 c''1 d''1 c''1 }
+  \new Voice = "voice1" {\clef "treble" e'1 f'1 g'1 a'1 b'1 e''1 e''1 d''1 c''1 a'1 b'1 c''1 }
+  \new Voice = "voice2" {\clef "bass" c'1 d'1 e'1 f'1 g'1 c'1 c'1 d'1 e'1 f'1 g'1 c'1 }
   \new Lyrics \lyricsto "voice2" { \analysis }
 >>
 }
