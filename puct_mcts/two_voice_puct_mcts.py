@@ -11,7 +11,7 @@
 
 import numpy as np
 import copy
-from shared_puct_mcts import MCTS
+from shared_puct_mcts import MCTS, MemoizeMutable
 from dataset_wrap import two_voice_species1_wrap
 from analysis import analyze_two_voices
 
@@ -37,6 +37,7 @@ class TwoVoiceSpecies1Manager(object):
 
         self.random_state = np.random.RandomState(1999)
         self.rollout_limit = rollout_limit
+        self.is_finished = MemoizeMutable(self._is_finished)
 
     def get_next_state(self, state, action):
         act = j_acts_map[action]
@@ -139,7 +140,7 @@ class TwoVoiceSpecies1Manager(object):
             if c > self.rollout_limit:
                 return 0.
 
-    def is_finished(self, state):
+    def _is_finished(self, state):
         if len(self.get_valid_actions(state)) == 0:
             return -1., -1., True
 

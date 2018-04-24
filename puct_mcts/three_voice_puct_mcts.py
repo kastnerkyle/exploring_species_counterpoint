@@ -11,9 +11,9 @@
 
 import numpy as np
 import copy
-from shared_puct_mcts import MCTS
+from shared_puct_mcts import MCTS, MemoizeMutable
 from dataset_wrap import three_voice_species1_wrap
-from analysis import analyze_three_voices
+from analysis import analyze_three_voices, midi_to_notes
 
 all_l, all_c_set, u_map, m_map, um_map, l_map, all_i = three_voice_species1_wrap()
 u_inv_map = {v: k for k, v in u_map.items()}
@@ -37,15 +37,84 @@ j_acts_map = {k: v for k, v in enumerate(sorted(j_map.keys()))}
 j_acts_inv_map = {v: k for k, v in j_acts_map.items()}
 
 class ThreeVoiceSpecies1Manager(object):
-    def __init__(self, guide_index, default_mode="C", offset_value=48, tonality="-", rollout_limit=1000):
-        self.default_mode = default_mode
-        self.offset_value = offset_value
-        # M or m or - major or minor or any tonality
+    def __init__(self, guide_index, offset_value=None, tonality=None, rollout_limit=1000):
         self.tonality = tonality
         self.guide_trace = all_l[guide_index]
 
+        if offset_value is None:
+            # [A - A)
+            offset_options = np.arange(45, 57)
+            offset_names = ["A", "Bb", "B", "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab"]
+            all_scale_steps = []
+            all_scale_names = []
+            # Maj
+            # Ionian, technically
+            io_scale_steps = np.array([0, 2, 4, 5, 7, 9, 11, 12])
+            all_scale_steps.append(io_scale_steps)
+            all_scale_names.append("Ionian")
+            # min
+            # Aeolian, technically
+            ae_scale_steps = np.array([0, 2, 3, 5, 7, 8, 10, 12])
+            all_scale_steps.append(ae_scale_steps)
+            all_scale_names.append("Aolian")
+            # Dorian
+            do_scale_steps = np.array([0, 2, 3, 5, 7, 9, 10, 12])
+            all_scale_steps.append(do_scale_steps)
+            all_scale_names.append("Dorian")
+            # Mixolydian
+            mi_scale_step = np.array([0, 2, 3, 5, 7, 8, 10, 12])
+            all_scale_steps.append(mi_scale_step)
+            all_scale_names.append("Mixolydian")
+            # Phrygian
+            ph_scale_steps = np.array([0, 1, 3, 5, 7, 8, 10, 12])
+            all_scale_steps.append(ph_scale_steps)
+            all_scale_names.append("Phrygian")
+            # Lydian
+            ly_scale_steps = np.array([0, 2, 4, 6, 7, 9, 11, 12])
+            all_scale_steps.append(ly_scale_steps)
+            all_scale_names.append("Lydian")
+            # Locrian
+            lo_scale_step = np.array([0, 1, 3, 5, 6, 8, 10, 12])
+            all_scale_steps.append(lo_scale_step)
+            all_scale_steps.append("Locrian")
+
+            accidentals = np.inf
+            least_accidentals = None
+            least_index = -1
+            for i, offset in enumerate(offset_options):
+                guide_notes = midi_to_notes([np.array(self.guide_trace) + offset])[0]
+                ac = sum([1 for gn in guide_notes if "#" in gn or "b" in gn])
+                if ac < accidentals:
+                    accidentals = ac
+                    least_accidentals = offset
+                    least_index = i
+            self.offset_value = least_accidentals
+            self.offset_name = offset_names[least_index]
+            print("Setting base note {}".format(self.offset_name))
+            min_set_diff = np.inf
+            min_set = []
+            for n in range(len(all_scale_steps)):
+                set_diff = len(set(self.guide_trace) - set(all_scale_steps[n]))
+                if set_diff <= min_set_diff:
+                    if set_diff < min_set_diff:
+                        min_set_diff = set_diff
+                        min_set = [n]
+                    else:
+                        min_set.append(n)
+            # use our "preferred" min set / mode
+            m = min_set[0]
+            print("Auto-setting mode to {}".format(all_scale_names[m]))
+            self.mode = all_scale_names[m]
+            self.scale_steps = all_scale_steps[m]
+            base_scale = all_scale_steps[m] + self.offset_value
+        else:
+            raise ValueError("non-auto tonality support NYI")
+            self.offset_value = offset_value
+
+        self.notes_in_scale = np.array(sorted(list(set([si for s in [base_scale + o for o in [-24, -12, 0, 12, 24]] for si in s]))))
         self.random_state = np.random.RandomState(1999)
         self.rollout_limit = rollout_limit
+        self.is_finished = MemoizeMutable(self._is_finished)
 
     def get_next_state(self, state, action):
         tup_act = j_acts_map[action]
@@ -60,17 +129,6 @@ class ThreeVoiceSpecies1Manager(object):
         s1 = np.array(state[1])
         s2 = np.array(state[2])
 
-        if self.tonality == "M":
-            # disallow minor 3rds and 6ths
-            disallowed = [3, 8, 15, 20, 27]
-        elif self.tonality == "m":
-            # disallow major 3rds and 6ths
-            disallowed = [4, 9, 16, 21, 28]
-        elif self.tonality == "-":
-            disallowed = []
-        else:
-            raise ValueError("self.tonality setting {} not understood".format(self.tonality))
-
         if len(state[0]) == 0:
             # for first notes, keep it pretty open
             va_u = [u_map[k] for k in sorted(u_map.keys())]
@@ -82,8 +140,12 @@ class ThreeVoiceSpecies1Manager(object):
             combs = [c for c in combs if abs(c[1] - c[0]) > 2 and c[0] > c[1]]
 
             # remove combinations that violate our previous settings for m/M tonality
+            #combs = [c for c in combs
+            #         if (c[0] not in disallowed and c[1] not in disallowed)]
+            # remove combinations with notes not in the scale
             combs = [c for c in combs
-                     if (c[0] not in disallowed and c[1] not in disallowed)]
+                     if c[0] + self.offset_value + state[2][0] in self.notes_in_scale and
+                     c[1] + self.offset_value + state[2][0] in self.notes_in_scale]
 
             # convert to correct option (intervals)
             # make sure it's a viable action
@@ -95,6 +157,7 @@ class ThreeVoiceSpecies1Manager(object):
             va_m = [m_map[k] for k in sorted(m_map.keys())]
             combs = [(u, m) for u in va_u for m in va_m]
             combs = [(u_inv_map[c[0]], m_inv_map[c[1]]) for c in combs]
+
             # no leaps of greater than a 6th in either voice
             combs = [c for c in combs if abs(c[0] - state[0][-1]) <= 9]
             combs = [c for c in combs if abs(c[1] - state[1][-1]) <= 9]
@@ -106,8 +169,16 @@ class ThreeVoiceSpecies1Manager(object):
             combs = [c for c in combs if abs(c[1] - c[0]) > 2 and c[0] > c[1]]
 
             # remove combinations that violate our previous settings for m/M tonality
+            #combs = [c for c in combs
+            #         if (c[0] not in disallowed and c[1] not in disallowed)]
+
+            # remove combinations with notes not in the scale
+            state_len = len(state[0])
+            state_len = min(state_len, len(state[2]) - 1)
             combs = [c for c in combs
-                     if (c[0] not in disallowed and c[1] not in disallowed)]
+                     if c[0] + self.offset_value + state[2][state_len] in self.notes_in_scale and
+                     c[1] + self.offset_value + state[2][state_len] in self.notes_in_scale]
+
             # convert to correct option (intervals)
             # make sure it's a viable action
             comb_acts = [j_acts_inv_map[c] for c in combs if c in j_acts_inv_map]
@@ -151,6 +222,7 @@ class ThreeVoiceSpecies1Manager(object):
         while True:
             a = self._rollout_fn(s)
             s = self.get_next_state(s, a)
+
             w, sc, e = self.is_finished(s)
             c += 1
             if e:
@@ -164,7 +236,7 @@ class ThreeVoiceSpecies1Manager(object):
             if c > self.rollout_limit:
                 return 0.
 
-    def is_finished(self, state):
+    def _is_finished(self, state):
         if len(state[0]) != len(state[1]):
             raise ValueError("Something bad in is_finished")
 
@@ -225,7 +297,9 @@ if __name__ == "__main__":
     all_parts = []
     all_durations = []
     mcts_random = np.random.RandomState(1110)
-    for guide_idx in range(len(all_l)):
+    for guide_idx in [0]:
+    #for guide_idx in [0, 15]:
+    #for guide_idx in range(len(all_l)):
         tvsp1m = ThreeVoiceSpecies1Manager(guide_idx)
         mcts = MCTS(tvsp1m, n_playout=1000, random_state=mcts_random)
         resets = 0

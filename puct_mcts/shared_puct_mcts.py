@@ -1,5 +1,19 @@
 import numpy as np
 import copy
+import cPickle
+
+class MemoizeMutable(object):
+    def __init__(self, fn):
+        self.fn = fn
+        self.memo = {}
+
+    def __call__(self, *args, **kwds):
+        str = cPickle.dumps(args, 1) + cPickle.dumps(kwds, 1)
+        if not self.memo.has_key(str):
+            self.memo[str] = self.fn(*args, **kwds)
+        else:
+            pass
+        return self.memo[str]
 
 
 def softmax(x):
