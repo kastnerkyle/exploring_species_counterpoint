@@ -153,37 +153,52 @@ class ThreeVoiceSpecies1Manager(object):
             va = comb_acts
             return va
         else:
-            va_u = [u_map[k] for k in sorted(u_map.keys())]
-            va_m = [m_map[k] for k in sorted(m_map.keys())]
-            combs = [(u, m) for u in va_u for m in va_m]
-            combs = [(u_inv_map[c[0]], m_inv_map[c[1]]) for c in combs]
+            # start at maximum leap interval of a 4th
+            upper = 5
+            mid = 5
+            # iteratively increase action space, slowly growing the possible actions
+            # start by loosening the middle voice, then the upper
+            while True:
+                va_u = [u_map[k] for k in sorted(u_map.keys())]
+                va_m = [m_map[k] for k in sorted(m_map.keys())]
+                combs = [(u, m) for u in va_u for m in va_m]
+                combs = [(u_inv_map[c[0]], m_inv_map[c[1]]) for c in combs]
 
-            state_len = len(state[0])
-            state_len = min(state_len, len(state[2]) - 1)
+                state_len = len(state[0])
+                state_len = min(state_len, len(state[2]) - 1)
 
-            # no leaps of greater than a 6th in either voice
-            combs = [c for c in combs if abs((c[0] + state[2][state_len]) - (state[0][state_len - 1] + state[2][state_len - 1])) <= 9]
-            combs = [c for c in combs if abs((c[1] + state[2][state_len]) - (state[1][state_len - 1] + state[2][state_len - 1])) <= 9]
+                # heavily constrain top voice, no leap greater than upper
+                combs = [c for c in combs if abs((c[0] + state[2][state_len]) - (state[0][state_len - 1] + state[2][state_len - 1])) <= upper]
 
-            # heavily constrain top voice, no leap greater than a 4th
-            combs = [c for c in combs if abs((c[0] + state[2][state_len]) - (state[0][state_len - 1] + state[2][state_len - 1])) <= 5]
+                # heavily constrain top voice, no leap greater than mid
+                combs = [c for c in combs if abs((c[1] + state[2][state_len]) - (state[1][state_len - 1] + state[2][state_len - 1])) <= mid]
 
-            # no voice crossing, m/M2 or unison
-            combs = [c for c in combs if abs(c[1] - c[0]) > 2 and c[0] > c[1] and c[1] != 0]
+                # no voice crossing, m/M2 or unison
+                combs = [c for c in combs if abs(c[1] - c[0]) > 2 and c[0] > c[1] and c[1] != 0]
 
-            # remove combinations that violate our previous settings for m/M tonality
-            #combs = [c for c in combs
-            #         if (c[0] not in disallowed and c[1] not in disallowed)]
+                # remove combinations with notes not in the scale
+                combs = [c for c in combs
+                         if c[0] + self.offset_value + state[2][state_len] in self.notes_in_scale and
+                         c[1] + self.offset_value + state[2][state_len] in self.notes_in_scale]
 
-            # remove combinations with notes not in the scale
-            combs = [c for c in combs
-                     if c[0] + self.offset_value + state[2][state_len] in self.notes_in_scale and
-                     c[1] + self.offset_value + state[2][state_len] in self.notes_in_scale]
-
-            # convert to correct option (intervals)
-            # make sure it's a viable action
-            comb_acts = [j_acts_inv_map[c] for c in combs if c in j_acts_inv_map]
-            va = comb_acts
+                # convert to correct option (intervals)
+                # make sure it's a viable action
+                comb_acts = [j_acts_inv_map[c] for c in combs if c in j_acts_inv_map]
+                va = comb_acts
+                # try to have a few options
+                if len(va) >= 3:
+                    break
+                else:
+                    # no leaps of greater than a 6th
+                    if mid < 9:
+                        # grow mid action space by 1
+                        mid += 1
+                    elif mid == 9 and upper < 9:
+                        # grow upper action space by 1
+                        upper += 1
+                    elif mid == 9 and upper == 9:
+                        # maximum action space, no choice but to bail
+                        break
             return va
 
     def get_init_state(self):
@@ -206,7 +221,7 @@ class ThreeVoiceSpecies1Manager(object):
         smooth_s1 = 1. / np.sum(np.abs(np.diff(mid)))
         unique_max = 1. / float(len(np.where(top == np.max(top))[0]))
         unique_count = 1. / float(len(set(s0)))
-        return smooth_s0 #1. + 1. * smooth_s0 + .25 * smooth_s1 + .25 * unique_max
+        return smooth_s0# + smooth_s1
 
     def rollout_from_state(self, state):
         s = state
@@ -344,12 +359,14 @@ if __name__ == "__main__":
                         states.append(state)
                         winner, score, end = mcts.state_manager.is_finished(state)
                         if len(states[-1][0]) == (len(states[-1][2]) - 1):
-                            # do the final "period" chord manually
+                            # do the final chord manually
                             end = True
                 if end:
                     mcts.reconstruct_tree()
 
                     # used to finalize partials
+                    # add an ending coda / chord
+                    # musical punctuation
                     poss = [0, 7, 12, 19, 24]
                     if 3 in mcts.state_manager.scale_steps:
                         poss += [3, 15, 27]
@@ -363,8 +380,8 @@ if __name__ == "__main__":
                     for ii, pe in enumerate(possible_ends):
                         tm1 = states[-1][0][-1]
                         mm1 = states[-1][1][-1]
-                        bm1 = states[-1][2][len(states[-1][0]) - 2]
-                        bm2 = states[-1][2][len(states[-1][0]) - 1]
+                        bm2 = states[-1][2][len(states[-1][0]) - 2]
+                        bm1 = states[-1][2][len(states[-1][0]) - 1]
 
                         diff = abs((tm1 + bm2) - (bm1 + pe[0])) + abs((mm1 + bm2) - (bm1 + pe[1]))
                         if diff < min_diff:
