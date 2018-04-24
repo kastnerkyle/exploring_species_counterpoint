@@ -313,8 +313,7 @@ if __name__ == "__main__":
     all_parts = []
     all_durations = []
     mcts_random = np.random.RandomState(1110)
-    #for guide_idx in range(len(all_l)):
-    for guide_idx in [0]:
+    for guide_idx in range(len(all_l)):
         tvsp1m = ThreeVoiceSpecies1Manager(guide_idx)
         mcts = MCTS(tvsp1m, n_playout=1000, random_state=mcts_random)
         resets = 0
@@ -339,7 +338,7 @@ if __name__ == "__main__":
 
             while True:
                 if not end:
-                    print("guide {}, step {}, resets {}".format(guide_idx, len(states), resets))
+                    print("guide {}, step {}, resets {}".format(guide_idx, len(states[-1][0]), resets))
                     if not exact:
                         a, ap = mcts.sample_action(state, temp=temp, add_noise=noise)
                     else:
@@ -354,15 +353,16 @@ if __name__ == "__main__":
                         for i in mcts.root.children_.keys():
                             print(i, mcts.root.children_[i].__dict__)
                             print("")
-                        print(state)
                         mcts.update_tree_root(a)
                         state = mcts.state_manager.get_next_state(state, a)
                         states.append(state)
+                        print(state)
                         winner, score, end = mcts.state_manager.is_finished(state)
                         if len(states[-1][0]) == (len(states[-1][2]) - 1):
                             # do the final chord manually
                             end = True
                 if end:
+                    print(states[-1])
                     mcts.reconstruct_tree()
 
                     # used to finalize partials
@@ -378,19 +378,21 @@ if __name__ == "__main__":
 
                     min_diff = np.inf
                     min_idx = -1
+                    tm1 = states[-1][0][-1]
+                    mm1 = states[-1][1][-1]
+                    bm1 = states[-1][2][len(states[-1][0]) - 1]
+                    bm0 = states[-1][2][len(states[-1][0])]
+                    # find the chord combination which minimizes movement in the upper voices, and use it
                     for ii, pe in enumerate(possible_ends):
-                        tm1 = states[-1][0][-1]
-                        mm1 = states[-1][1][-1]
-                        bm2 = states[-1][2][len(states[-1][0]) - 2]
-                        bm1 = states[-1][2][len(states[-1][0]) - 1]
-
-                        diff = abs((tm1 + bm2) - (bm1 + pe[0])) + abs((mm1 + bm2) - (bm1 + pe[1]))
+                        diff = abs((tm1 + bm1) - (bm0 + pe[0])) + abs((mm1 + bm1) - (bm0 + pe[1]))
                         if diff < min_diff:
                             min_diff = diff
                             min_idx = ii
 
                     states[-1][0].append(possible_ends[min_idx][0])
                     states[-1][1].append(possible_ends[min_idx][1])
+                    print("Finalized end")
+                    print(states[-1])
                     n_valid_samples += 1
                     valid_state_traces.append(states[-1])
                     break
