@@ -332,31 +332,45 @@ if __name__ == "__main__":
 
                     if a is None:
                         print("Ran out of valid actions, stopping early at step {}".format(len(states)))
+                        print("No actions")
+                        from IPython import embed; embed(); raise ValueError()
                         valid_state_traces.append(states[-1])
                         n_valid_samples += 1
-                        break
+                        end = True
 
-                    for i in mcts.root.children_.keys():
-                        print(i, mcts.root.children_[i].__dict__)
-                        print("")
-                    print(state)
-                    mcts.update_tree_root(a)
-                    state = mcts.state_manager.get_next_state(state, a)
-                    states.append(state)
-                    winner, score, end = mcts.state_manager.is_finished(state)
-                    if len(states[-1][0]) < len(states[-1][2]) and end:
-                        end = False
-                else:
+                    if not end:
+                        for i in mcts.root.children_.keys():
+                            print(i, mcts.root.children_[i].__dict__)
+                            print("")
+                        print(state)
+                        mcts.update_tree_root(a)
+                        state = mcts.state_manager.get_next_state(state, a)
+                        states.append(state)
+                        winner, score, end = mcts.state_manager.is_finished(state)
+                        if len(states[-1][0]) == (len(states[-1][2]) - 1):
+                            # do the final "period" chord manually
+                            end = True
+                if end:
                     mcts.reconstruct_tree()
-                    print(state)
-                    if len(states) > 1 and len(states[-1][0]) == len(states[-1][2]):
-                        print("Got to the end")
-                        n_valid_samples += 1
-                        valid_state_traces.append(states[-1])
-                        break
-                    else:
-                        print("Finished in {} steps".format(len(states)))
-                        break
+
+                    # used to finalize partials
+                    poss = [0, 7, 12, 19, 24]
+                    possible_ends = [(c0, c1) for c0 in poss for c1 in poss]
+                    possible_ends = [(c[0], c[1]) for c in possible_ends if c[0] >= c[1]]
+
+                    min_diff = np.inf
+                    min_idx = -1
+                    for ii, pe in enumerate(possible_ends):
+                        diff = abs(states[-1][0][-1] - pe[0]) + abs(states[-1][1][-1] - pe[1])
+                        if diff < min_diff:
+                            min_diff = diff
+                            min_idx = ii
+
+                    states[-1][0].append(possible_ends[min_idx][0])
+                    states[-1][1].append(possible_ends[min_idx][1])
+                    n_valid_samples += 1
+                    valid_state_traces.append(states[-1])
+                    break
 
         s = valid_state_traces[0]
         s0 = np.array(s[0])
